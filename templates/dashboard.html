@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <link rel="stylesheet" href="{{base}}/static/css/dashboard.css"/>
+        <title>Dashboard | BeamMP Manager</title>
+        <link rel="icon" type="image/png" href="{{base}}/static/images/icon.png"/>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" crossorigin="anonymous">
+    </head>
+
+    <body>
+        <!-- Navbar -->
+        <nav class="navbar bg-white" style="border-bottom-color: #f3f3f3; border-bottom-width: 4px; border-bottom-style: solid;">
+            <div class="container-fluid d-flex align-items-center" style="min-height: 60px;">
+                <span class="navbar-brand d-flex align-items-center">
+                    <img src="{{base}}/static/images/icon_nav.png" alt="Logo" width="40" height="40" style="margin-right: 5%; margin-left: 0%;">
+                    BeamMP Manager
+                </span>
+                <!-- Page Buttons -->
+                <div class="container position-absolute top-50 start-50 translate-middle styled-triple-button-container" style="min-height: 40px;">
+                    <a id="homeButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute start-0 top-50 translate-middle-y styled-triple-button page-selected" style="margin-left: 0.9%; margin-right: 0%;">
+                            Home
+                        </button>
+                    </a>
+                    <a id="modsButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-triple-button">
+                            Mods
+                        </button>
+                    </a>
+                    <a id="logsButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute end-0 top-50 translate-middle-y styled-triple-button" style="margin-right: 0.9%; margin-left: 0%;">
+                            Logs
+                        </button>
+                        <div class="container position-absolute top-50 end-0 translate-middle-y styled-triple-button-accent-right"></div>
+                    </a>
+                    <div class="container position-absolute top-50 start-0 translate-middle-y styled-triple-button-accent-left"></div>
+                </div>
+                <!-- Logout Button -->
+                <div class="container position-absolute top-50 end-0 translate-middle-y styled-single-button-container" style="min-height: 40px; margin-right: 1%; margin-left: 0%;">
+                    <a href="{{base}}/logout">
+                        <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-single-button">
+                            Logout
+                        </button>
+                        <div class="container position-absolute top-50 start-0 translate-middle-y styled-single-button-accent-left"></div>
+                        <div class="container position-absolute top-50 end-0 translate-middle-y styled-single-button-accent-right"></div>
+                    </a>
+                </div>
+
+            </div>
+        </nav>
+
+        <!-- Content -->
+        <div id="homePage" style="margin-top: 5%;">
+            <div class="container px-4">
+                <div class="row gx-5">
+                    <div class="col-6">
+                        <div style="background-color: #f3f3f3; height: 70vh; padding-right: 5%; padding-left: 5%; border-radius: 50px;">
+                            <h2 class="text-center" style="width: 80%; margin-right: 10%; margin-left: 10%; border-bottom-width: 4px; border-bottom-color: #FF6700; border-bottom-style: solid; padding-bottom: 1%;">Players</h2>
+                            <div id="players" style="height: 60vh; overflow-y: auto; padding-right: 1%;">
+                                
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div>
+                            <h2 id="serverStatus" class="text-center" style="color: #FF6700; background-color: #f3f3f3; border-radius: 50px;"> </h2>
+                            <br>
+                            <div class="d-flex justify-content-evenly">
+                                <button id="restartServerButton" type="button" class="btn btn-orange">Restart Server</button>
+                                <button id="reloadModsButton" type="button" class="btn btn-orange">Reload Mods</button>
+                            </div>
+                            <br>
+                            <div class="d-flex justify-content-evenly">
+                                <button id="serverMessageButton" type="button" class="btn btn-secondary">Server Message</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="modsPage" style="margin-top: 5%;" hidden aria-hidden="true">
+            <div class="container px-4">
+                <div class="row gx-5">
+                    <div class="col-6">
+                        <div style="background-color: #f3f3f3; height: 70vh; padding-right: 5%; padding-left: 5%; border-radius: 50px;">
+                            <h2 id="enabledModsLabel" class="text-center" data-bs-toggle="tooltip" data-bs-title=" " style="width: 80%; margin-right: 10%; margin-left: 10%; border-bottom-width: 4px; border-bottom-color: #FF6700; border-bottom-style: solid; padding-bottom: 1%;">Enabled Mods</h2>
+                            <div id="enabledMods" style="height: 60vh; overflow-y: auto; padding-right: 1%;">
+                                
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div style="background-color: #f3f3f3; height: 70vh; padding-right: 5%; padding-left: 5%; border-radius: 50px;">
+                            <h2 id="disabledModsLabel" class="text-center" data-bs-toggle="tooltip" data-bs-title=" " style="width: 80%; margin-right: 10%; margin-left: 10%; border-bottom-width: 4px; border-bottom-color: #c2d3de; border-bottom-style: solid; padding-bottom: 1%;">Disabled Mods</h2>
+                            <div id="disabledMods" style="height: 60vh; overflow-y: auto; padding-right: 1%;">
+                                
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <a href="#" id="uploadButton" style="text-decoration: none;">
+                <button type="button" class="btn upload-button position-absolute start-50 bottom-0 translate-middle-x" style="border-style: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
+                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
+                        <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
+                    </svg>
+                    Upload Mod
+                </button>
+            </a>
+        </div>
+        <div id="logsPage" style="margin-top: 5%;" hidden aria-hidden="true">
+            <div class="container px-4">
+                <div class="row gx-5">
+                    <div class="col-6">
+                        <div style="background-color: #f3f3f3; height: 70vh; padding-right: 5%; padding-left: 5%; border-radius: 50px;">
+                            <h2 class="text-center" style="width: 80%; margin-right: 10%; margin-left: 10%; border-bottom-width: 4px; border-bottom-color: #FF6700; border-bottom-style: solid; padding-bottom: 1%;">Player Logs</h2>
+                            <div id="playerLogs" class="d-flex" style="height: 60vh; overflow-y: auto; padding-right: 1%; flex-direction: column-reverse;">
+                                
+                            </div>
+                            <p class="text-center" style="color: #999999;">Most recent logs appear near the bottom</p>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div style="background-color: #f3f3f3; height: 70vh; padding-right: 5%; padding-left: 5%; border-radius: 50px;">
+                            <h2 class="text-center" style="width: 80%; margin-right: 10%; margin-left: 10%; border-bottom-width: 4px; border-bottom-color: #c2d3de; border-bottom-style: solid; padding-bottom: 1%;">Chat logs</h2>
+                            <div id="chatLogs" class="d-flex" style="height: 60vh; overflow-y: auto; padding-right: 1%; flex-direction: column-reverse;">
+                                
+                            </div>
+                            <p class="text-center" style="color: #999999;">Most recent logs appear near the bottom</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="container position-absolute top-50 start-50 translate-middle styled-single-button-container" style="min-height: 40px;" hidden="true">
+            <a id="restartButton" href="#">
+                <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-single-button">
+                    Restart
+                </button>
+                <div class="container position-absolute top-50 start-0 translate-middle-y styled-single-button-accent-left"></div>
+                <div class="container position-absolute top-50 end-0 translate-middle-y styled-single-button-accent-right"></div>
+            </a>
+        </div>
+        <div class="container position-absolute top-50 start-0 translate-middle-y styled-single-button-container" style="min-height: 40px;" hidden="true">
+            <a id="sayButton" href="#">
+                <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-single-button">
+                    Say
+                </button>
+                <div class="container position-absolute top-50 start-0 translate-middle-y styled-single-button-accent-left"></div>
+                <div class="container position-absolute top-50 end-0 translate-middle-y styled-single-button-accent-right"></div>
+            </a>
+        </div>
+
+        <!-- Toasts -->
+        <div class="toast-container position-fixed p-3 bottom-0 end-0">
+            <div id="errorToast" class="toast align-items-center text-bg-danger" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="10000">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        An error occurred, please try again later.
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+            <div id="infoToast" class="toast align-items-center text-bg-primary" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="10000">
+                <div class="d-flex">
+                    <div class="toast-body">
+                        Info.
+                    </div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modals -->
+        <div class="modal fade" id="uploadModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="uploadModModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="uploadModalLabel">Upload Mod</h1>
+                        <button id="cancelUploadX" type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="uploadForm" class="needs-validation">
+                            <label for="formFilename" class="form-label">
+                                Mod Name
+                                <span style="color:#FF0000">*</span>
+                            </label>
+                            <input name="filename" type="text" class="form-control" id="formFilename" placeholder="MyCoolMod" maxlength="20" minlength="1" pattern="[A-Za-z0-9]+" title="1-20 alphanumeric characters." required>
+                            <br>
+                            <div class="mb-3">
+                                <label for="formFile" class="form-label">
+                                    BeamNG Mod File (Zip Archive)
+                                    <span style="color:#FF0000">*</span>
+                                </label>
+                                <input name="archive" class="form-control" type="file" id="formFile" accept=".zip" title="Please select a zip file." required>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelUpload" type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="uploadModalButton" type="submit" class="btn btn-orange" form="uploadForm">Upload</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="kickModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="kickPlayerModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="kickModalLabel">Kick Player</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="kickForm" class="needs-validation">
+                            <label for="kickReason" class="form-label">Reason</label>
+                            <input name="reason" type="text" class="form-control" id="kickReason" placeholder="Kicked by admin">
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="kickFormButton" type="submit" class="btn btn-orange" form="kickForm">Kick</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="messageModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="serverMessageModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">Server Message</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="messageForm" class="needs-validation">
+                            <label for="message" class="form-label">
+                                Message
+                                <span style="color:#FF0000">*</span>
+                            </label>
+                            <input name="reason" type="text" class="form-control" id="message" placeholder="Hello" required>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="messageModalButton" type="submit" class="btn btn-orange" form="messageForm">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="deleteModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="deleteModModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="deleteModalLabel">Delete Mod</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        This operation is irreversible!
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="deleteModalButton" type="button" class="btn btn-red">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="restartModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="restartServerModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">Restart Server</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        This will stop and start the server, kicking any connected players.
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="restartModalButton" type="button" class="btn btn-orange">Restart</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="reloadModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="reloadPageModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="relaodModalLabel">Connection Lost</h1>
+                    </div>
+                    <div class="modal-body">
+                        Connection to the server has been lost. Reload the page to reconnect.
+                    </div>
+                    <div class="modal-footer">
+                        <a href="">
+                            <button id="reloadButton" type="button" class="btn btn-orange">Reload</button>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js" integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" crossorigin="anonymous"></script>
+        <script src="{{base}}/static/js/dashboard.js"></script>
+    </body>
+
+</html>

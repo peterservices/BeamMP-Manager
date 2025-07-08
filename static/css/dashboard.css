@@ -1,0 +1,252 @@
+/* Single Buttons */
+
+div.styled-single-button-container {
+    clip-path: polygon(10% 0, 100% 0%, 90% 100%, 0 100%);
+    width: 10%;
+    height: 30%;
+}
+
+div.styled-single-button-accent-left {
+    clip-path: polygon(20% 0, 100% 0%, 80% 100%, 0 100%);
+    background-color: #FF6700;
+    width: 50%;
+    height: 100%;
+}
+
+div.styled-single-button-accent-right {
+    clip-path: polygon(20% 0, 100% 0%, 80% 100%, 0 100%);
+    background-color: #c2d3de;
+    width: 50%;
+    height: 100%;
+}
+
+button.styled-single-button {
+    color: #000000;
+    clip-path: polygon(10.5% 0%, 100% 0%, 89.5% 100%, 0% 100%);
+    padding-left: 5%;
+    padding-right: 5%;
+    width: 95%;
+    height: 100%;
+    background-color: #f2f4f6;
+    border-radius: 0%;
+    z-index: 10;
+    border-style: none;
+}
+
+button.styled-single-button:hover {
+    color: #FFFFFF;
+    background-color: #FF6700;
+}
+
+button.styled-single-button:hover ~ div.styled-single-button-accent-right {
+    background-color: #FF6700;
+}
+
+button.styled-single-button:active {
+    color: #000000 !important;
+    background-color: #c2d3de !important;
+}
+
+button.styled-single-button:active ~ div.styled-single-button-accent-right {
+    background-color: #c2d3de;
+}
+
+/* Triple Buttons */
+
+div.styled-triple-button-accent-left {
+    clip-path: polygon(6.66% 0%, 100% 0%, 93.33% 100%, 0% 100%);
+    background-color: #FF6700;
+    width: 50%;
+    height: 100%;
+}
+
+div.styled-triple-button-accent-right {
+    clip-path: polygon(6.66% 0%, 100% 0%, 93.33% 100%, 0% 100%);
+    background-color: #c2d3de;
+    width: 50%;
+    height: 100%;
+}
+
+div.styled-triple-button-container {
+    clip-path: polygon(3.33% 0%, 100% 0%, 96.66% 100%, 0% 100%);
+    width: 30%;
+    height: 30%;
+}
+
+button.styled-triple-button {
+    color: #000000;
+    clip-path: polygon(9.5% 0%, 100% 0%, 90.5% 100%, 0% 100%);
+    padding-left: 5%;
+    padding-right: 5%;
+    width: 35.1%;
+    height: 100%;
+    background-color: #f2f4f6;
+    border-radius: 0%;
+    z-index: 10;
+    border-style: none;
+}
+
+button.styled-triple-button:hover {
+    color: #FFFFFF;
+    background-color: #FF6700;
+}
+
+button.styled-triple-button:hover ~ div.styled-triple-button-accent-right {
+    background-color: #FF6700;
+}
+
+button.styled-triple-button:active {
+    color: #000000 !important;
+    background-color: #c2d3de !important;
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+}
+
+button.styled-triple-button:active ~ div.styled-triple-button-accent-right {
+    background-color: #c2d3de;
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+}
+
+button.page-selected {
+    color: #000000 !important;
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+    background-color: #c2d3de !important;
+}
+
+button.page-selected ~ div.styled-triple-button-accent-right {
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+    background-color: #c2d3de !important;
+}
+
+/* Mod Buttons */
+
+button.disable-button {
+    border-style: none;
+    background-color: #c2d3de !important;
+}
+
+button.enable-button {
+    border-style: none;
+    background-color: #FF6700 !important;
+}
+
+button.delete-button {
+    border-style: none;
+    background-color: #FF0000 !important;
+}
+
+button.disable-button:hover {
+    color: #FFFFFF;
+}
+
+button.enable-button:hover {
+    color: #FFFFFF;
+}
+
+button.delete-button:hover {
+    color: #FFFFFF;
+}
+
+button.disable-button:active {
+    color: #000000 !important;
+}
+
+button.enable-button:active {
+    color: #000000 !important;
+}
+
+button.delete-button:active {
+    color: #000000 !important;
+}
+
+button.disable-button:disabled {
+    color: #f3f3f3 !important;
+}
+
+button.enable-button:disabled {
+    color: #f3f3f3 !important;
+}
+
+button.delete-button:disabled {
+    color: #f3f3f3 !important;
+}
+
+/* Player Buttons */
+
+button.kick-button {
+    border-style: none;
+    background-color: #FF6700;
+}
+
+button.kick-button:hover {
+    color: #FFFFFF;
+    background-color: #FF6700;
+}
+
+button.kick-button:active {
+    color: #000000 !important;
+    background-color: #FF6700 !important;
+}
+
+/* Misc */
+
+a.disabled {
+    pointer-events: none;
+    cursor: default;
+}
+
+button.btn-orange {
+    color: #FFFFFF;
+    background-color: #FF6700;
+    border-style: none;
+}
+
+button.btn-orange:hover {
+    color: #FFFFFF;
+    background-color: #cc5200;
+}
+
+button.btn-orange:active {
+    color: #FFFFFF !important;
+    background-color: #cc5200 !important;
+}
+
+button.btn-red {
+    color: #FFFFFF;
+    background-color: #FF0000;
+    border-style: none;
+}
+
+button.btn-red:hover {
+    color: #FFFFFF;
+    background-color: #cc0000;
+}
+
+button.btn-red:active {
+    color: #FFFFFF !important;
+    background-color: #cc0000 !important;
+}
+
+button.upload-button {
+    color: #000000;
+    background-color: #c2d3de;
+    border-style: none;
+    margin-bottom: 2%;
+}
+
+button.upload-button:hover {
+    color: #FFFFFF;
+    background-color: #c2d3de;
+}
+
+button.upload-button:active {
+    color: #000000 !important;
+    background-color: #c2d3de !important;
+}
