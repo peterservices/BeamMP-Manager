@@ -1,2 +1,6 @@
-launcher.sh
+__pycache__
+.env
+Resources
+Server*.log
+ServerConfig.toml
 uv.lock
