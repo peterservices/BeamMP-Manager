@@ -917,11 +917,11 @@ async def startup():
         for file in temp_files:
             await aioos.remove(os.path.join("Resources/Client.temp/", file))
     if "mods.json" not in await aioos.listdir("Resources/Client/"):
-        async with aiofiles.open("Resources/Client/", "w") as file:
-            file.write(json.dumps(None))
+        async with aiofiles.open("Resources/Client/mods.json", "w") as file:
+            await file.write(json.dumps(None))
     if "mods.json" not in await aioos.listdir("Resources/Client.disabled/"):
-        async with aiofiles.open("Resources/Client.disabled/", "w") as file:
-            file.write(json.dumps(None))
+        async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
+            await file.write(json.dumps(None))
 
     # Start BeamMP Server and start monitoring logs
     await start_server()
