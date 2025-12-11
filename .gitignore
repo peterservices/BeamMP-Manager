@@ -1,5 +1,6 @@
 __pycache__
 .env
+config.json
 Resources
 Server*.log
 ServerConfig.toml
