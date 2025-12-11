@@ -53,6 +53,9 @@ QuartAuth(app, duration=30 * 24 * 60 * 60)
 
 base = "/beammp"
 
+class LocalConfiguration(TypedDict):
+    server_path: str
+
 class ServerData(TypedDict):
     process: asyncio.subprocess.Process | None
     connected: bool
@@ -121,6 +124,21 @@ class Broker:
                 yield await connection.get()
         finally:
             self.connections.remove(connection)
+
+configuration = LocalConfiguration(server_path="BeamMP-Server")
+if not os.path.exists("config.json"):
+    with open("config.json", "x") as file:
+        json.dump(configuration, file, indent=5)
+else:
+    with open("config.json", "r+") as file:
+        config_JSON: dict = json.load(file)
+    if "server_path" in config_JSON and os.path.exists(config_JSON["server_path"]):
+        configuration["server_path"] = os.path.abspath(config_JSON["server_path"])
+
+    # Save any new changes to disk
+    if config_JSON != configuration:
+        with open("config.json", "w") as file:
+            json.dump(configuration, file, indent=5)
 
 server_data = ServerData(process=None, connected=False, error=False, version=None, lua_version=None, port=None, max_clients=None, mods=0, players={}, player_logs=[], chat_logs=[])
 server_settings = ServerSettings()
@@ -193,7 +211,7 @@ async def start_server() -> None:
     await reset_server_settings()
     await reset_server_data()
     await send_changed_data(old_data)
-    server_data["process"] = await asyncio.subprocess.create_subprocess_exec("./BeamMP-Server.debian.12.arm64", stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    server_data["process"] = await asyncio.subprocess.create_subprocess_exec(configuration["server_path"], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
 
 # -- Website routes --
 
