@@ -322,12 +322,12 @@ async def get_mod_file(filename: str):
             if start >= file_size or end >= file_size:
                 return Response(status=416)
 
-            chunk_size = end - start + 1
+            requested_chunk_size = end - start + 1
 
             async def partial_gen():
                 async with aiofiles.open(path, mode="rb") as f:
                     await f.seek(start)
-                    remaining = chunk_size
+                    remaining = requested_chunk_size
                     while remaining > 0:
                         read_size = min(chunk_size, remaining)
                         chunk = await f.read(read_size)
