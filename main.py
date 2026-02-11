@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import copy
 import datetime
 import hashlib
@@ -10,13 +11,14 @@ import signal
 import typing
 import zipfile
 from collections.abc import AsyncGenerator
-from typing import TypedDict
+from typing import Any
 
 import aiofiles
 import aiofiles.os as aioos
 import discordoauth2
 import vt
 from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict
 from quart import (
     Quart,
     Response,
@@ -53,58 +55,44 @@ QuartAuth(app, duration=30 * 24 * 60 * 60)
 
 base = "/beammp"
 
-class LocalConfiguration(TypedDict):
-    server_path: str
+class LocalConfiguration(BaseModel):
+    server_path: str = "BeamMP-Server"
 
-class ServerData(TypedDict):
-    process: asyncio.subprocess.Process | None
-    connected: bool
-    error: bool
-    version: str | None
-    lua_version: str | None
-    port: int | None
-    max_clients: int | None
-    mods: int
-    players: dict[str, str]
-    player_logs: list[dict[str, str]]
-    chat_logs: list[dict[str, str]]
+class ServerData(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-class ServerSettings(TypedDict):
-    AllowGuests: bool
-    Description: str
-    Tags: str
-    MaxCars: int
-    MaxPlayers: int
-    Name: str
-    Map: str
-    Private: bool
-    IP: str
-    Port: int
-    LogChat: bool
-    Debug: bool
-    ResourceFolder: str
+    process: asyncio.subprocess.Process | None = None
+    connected: bool = False
+    error: bool = False
+    version: str | None = None
+    lua_version: str | None = None
+    port: int | None = None
+    max_clients: int | None = None
+    mods: int = 0
+    players: dict[str, str] = {}
+    player_logs: list[dict[str, str]] = []
+    chat_logs: list[dict[str, str | list]] = []
 
-server_settings_types = {
-    "AllowGuests": "bool",
-    "Description": "str",
-    "Tags": "str",
-    "MaxCars": "int",
-    "MaxPlayers": "int",
-    "Name": "str",
-    "Map": "str",
-    "Private": "bool",
-    "IP": "str",
-    "Port": "int",
-    "LogChat": "bool",
-    "Debug": "bool",
-    "ResourceFolder": "str"
-}
+class ServerSettings(BaseModel):
+    AllowGuests: bool | None = None
+    Description: str | None = None
+    Tags: str | None = None
+    MaxCars: int | None = None
+    MaxPlayers: int | None = None
+    Name: str | None = None
+    Map: str | None = None
+    Private: bool | None = None
+    IP: str | None = None
+    Port: int | None = None
+    LogChat: bool | None = None
+    Debug: bool | None = None
+    ResourceFolder: str | None = None
 
 class Broker:
     def __init__(self) -> None:
         self.connections: set[asyncio.Queue] = set()
 
-    async def event(self, data: dict[str] | None) -> None:
+    async def event(self, data: dict[str, Any] | None) -> None:
         # Catch shutdown request
         if data is None:
             for connection in self.connections:
@@ -125,20 +113,23 @@ class Broker:
         finally:
             self.connections.remove(connection)
 
-configuration = LocalConfiguration(server_path="BeamMP-Server")
+configuration = LocalConfiguration()
 if not os.path.exists("config.json"):
+    to_write = configuration.model_dump_json(indent=5)
     with open("config.json", "x") as file:
-        json.dump(configuration, file, indent=5)
+        file.write(to_write)
 else:
     with open("config.json", "r+") as file:
-        config_JSON: dict = json.load(file)
-    if "server_path" in config_JSON and os.path.exists(config_JSON["server_path"]):
-        configuration["server_path"] = os.path.abspath(config_JSON["server_path"])
+        config_str = file.read()
+    configuration = LocalConfiguration.model_validate_json(config_str)
+    if configuration and os.path.exists(configuration.server_path):
+        configuration.server_path = os.path.abspath(configuration.server_path)
 
     # Save any new changes to disk
-    if config_JSON != configuration:
+    if configuration.model_dump_json() != config_str:
+        to_write = configuration.model_dump_json(indent=5)
         with open("config.json", "w") as file:
-            json.dump(configuration, file, indent=5)
+            file.write(to_write)
 
 server_data = ServerData(process=None, connected=False, error=False, version=None, lua_version=None, port=None, max_clients=None, mods=0, players={}, player_logs=[], chat_logs=[])
 server_settings = ServerSettings()
@@ -146,22 +137,26 @@ broker = Broker()
 websockets: list[asyncio.Task] = []
 temp_files: dict[str, dict[str, str | int | datetime.datetime]] = {}
 
-async def run_command(command: str) -> None:
+async def run_command(command_str: str) -> None:
     """
     Sends a command to the BeamMP server.
     """
-    if server_data["process"] is None:
+    if server_data.process is None:
         return
-    command = command + "\n"
-    command = command.encode()
-    server_data["process"].stdin.write(command)
-    await server_data["process"].stdin.drain()
+    command_str = command_str + "\n"
+    command = command_str.encode()
+    server_data.process.stdin.write(command)
+    await server_data.process.stdin.drain()
 
-async def send_changed_data(old_data: dict[str], old_settings: dict[str] | None = None) -> None:
+async def send_changed_data(old_data: ServerData, old_settings: ServerSettings | None = None) -> None:
     changes = {}
-    for key in old_data:
-        if server_data[key] != old_data[key]:
-            changes[key] = server_data[key]
+    server_data_dict = server_data.model_dump()
+    server_data_dict.pop("process")
+    old_data_dict = old_data.model_dump()
+    old_data_dict.pop("process")
+    for key in old_data_dict:
+        if server_data_dict[key] != old_data_dict[key]:
+            changes[key] = server_data_dict[key]
     if len(changes) != 0:
         await broker.event(changes)
 
@@ -169,9 +164,11 @@ async def send_changed_data(old_data: dict[str], old_settings: dict[str] | None 
         return
 
     changes = {}
-    for key in server_settings:
-        if key not in old_settings or server_settings[key] != old_settings[key]:
-            changes[key] = server_settings[key]
+    server_settings_dict = server_settings.model_dump()
+    old_settings_dict = old_settings.model_dump()
+    for key in server_settings_dict:
+        if key not in old_settings_dict or server_settings_dict[key] != old_settings_dict[key]:
+            changes[key] = server_settings_dict[key]
     if len(changes) != 0:
         changes["type"] = "settings"
         await broker.event(changes)
@@ -180,17 +177,8 @@ async def reset_server_data() -> None :
     """
     Resets server_data to its default state.
     """
-    server_data["process"] = None
-    server_data["connected"] = False
-    server_data["error"] = False
-    server_data["version"] = None
-    server_data["lua_version"] = None
-    server_data["port"] = None
-    server_data["max_clients"] = None
-    server_data["mods"] = 0
-    server_data["players"] = {}
-    server_data["player_logs"] = []
-    server_data["chat_logs"] = []
+    global server_data
+    server_data = ServerData()
 
 async def reset_server_settings() -> None:
     """
@@ -203,15 +191,15 @@ async def start_server() -> None:
     """
     Starts the BeamMP Server.
     """
-    old_data = server_data.copy()
-    old_data.pop("process")
-    old_data = copy.deepcopy(old_data)
+    old_data_dict = server_data.model_dump()
+    old_data_dict["process"] = None # Set process to None before deep copying because it is un-pickleab
+    old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
     async with aiofiles.open("Server.log", "w") as file:
         await file.writelines("")
     await reset_server_settings()
     await reset_server_data()
     await send_changed_data(old_data)
-    server_data["process"] = await asyncio.subprocess.create_subprocess_exec(configuration["server_path"], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.server_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
 
 # -- Website routes --
 
@@ -524,33 +512,33 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 return None
             match ws_request["request"]:
                 case "all":
-                    data = server_data.copy()
+                    data = server_data.model_dump()
                     data.pop("process")
                     return data
                 case "connected":
-                    return {"connected": server_data["connected"]}
+                    return {"connected": server_data.connected}
                 case "error":
-                    return {"error": server_data["error"]}
+                    return {"error": server_data.error}
                 case "version":
-                    return {"version": server_data["version"]}
+                    return {"version": server_data.version}
                 case "lua_version":
-                    return {"lua_version": server_data["lua_version"]}
+                    return {"lua_version": server_data.lua_version}
                 case "port":
-                    return {"port": server_data["port"]}
+                    return {"port": server_data.port}
                 case "max_clients":
-                    return {"max_clients": server_data["max_clients"]}
+                    return {"max_clients": server_data.max_clients}
                 case "mods":
-                    return {"mods": server_data["mods"]}
+                    return {"mods": server_data.mods}
                 case "players":
-                    return {"players": server_data["players"]}
+                    return {"players": server_data.players}
                 case "player_logs":
-                    return {"player_logs": server_data["player_logs"]}
+                    return {"player_logs": server_data.player_logs}
                 case "chat_logs":
-                    return {"chat_logs": server_data["chat_logs"]}
+                    return {"chat_logs": server_data.chat_logs}
                 case "mod_list":
                     mods = None
                     async with aiofiles.open("Resources/Client/mods.json") as file:
-                        mods: dict[str, dict[str]] | None = json.loads(await file.read())
+                        mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                     if mods is not None:
                         for _, mod in mods.items():
                             mod.pop("hash")
@@ -560,7 +548,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
 
                     mods_disabled = None
                     async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
-                        mods_disabled: dict[str, dict[str]] | None = json.loads(await file.read())
+                        mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                     if mods_disabled is not None:
                         for _, mod in mods_disabled.items():
                             mod.pop("hash")
@@ -574,30 +562,30 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 return None
             match ws_request["command"]:
                 case "restart":
-                    if server_data["process"] is not None and server_data["process"].returncode is None:
-                        server_data["process"].terminate()
+                    if server_data.process is not None and server_data.process.returncode is None:
+                        server_data.process.terminate()
                     await start_server()
                     return {"action": "restart"}
                 case "stop":
-                    if server_data["process"] is not None:
-                        server_data["process"].terminate()
+                    if server_data.process is not None:
+                        server_data.process.terminate()
                         await reset_server_data()
                         return {"action": "stop"}
                     return {"action": "stop", "success": False}
                 case "kick":
                     if "player" not in ws_request or "reason" not in ws_request:
                         return None
-                    if server_data["process"] is not None:
+                    if server_data.process is not None:
                         await run_command(f"kick {ws_request["player"]} {ws_request["reason"]}")
                         return {"action": "kick"}
                 case "say":
                     if "message" not in ws_request:
                         return None
-                    if server_data["process"] is not None:
+                    if server_data.process is not None:
                         await run_command(f"say {ws_request["message"]}")
                         return {"action": "say"}
                 case "reloadmods":
-                    if server_data["process"] is not None:
+                    if server_data.process is not None:
                         await run_command("reloadmods")
                         return {"action": "reloadmods"}
         case "enable":
@@ -611,12 +599,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
             # Remove enabled mod information from disabled json file
             mods_disabled = None
             async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
-                mods_disabled: dict[str, dict[str]] | None = json.loads(await file.read())
+                mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
             if mods_disabled is not None and ws_request["enable"] in mods_disabled:
                 # Add enabled mods information to enabled json file to prevent rehashing for better performance
                 mods = None
                 async with aiofiles.open("Resources/Client/mods.json") as file:
-                    mods: dict[str, dict[str]] | None = json.loads(await file.read())
+                    mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                 if mods is not None and ws_request["enable"] not in mods:
                     mods[ws_request["enable"]] = mods_disabled[ws_request["enable"]]
                 elif mods is None:
@@ -647,7 +635,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
 
             # Add disabled mod information to disabled json file
             async with aiofiles.open("Resources/Client/mods.json") as file:
-                mods: dict[str, dict[str]] | None = json.loads(await file.read())
+                mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
             mod_info = mods[ws_request["disable"]]
             mods_disabled = None
             async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
@@ -680,7 +668,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
             if disabled:
                 mods_disabled = None
                 async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
-                    mods_disabled: dict[str, dict[str]] | None = json.loads(await file.read())
+                    mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                 if mods_disabled is not None and ws_request["delete"] in mods_disabled:
                     del mods_disabled[ws_request["delete"]]
                 to_write = json.dumps(mods_disabled)
@@ -695,17 +683,17 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
             if "setting" not in ws_request:
                 return None
             if ws_request["setting"] == "all":
-                return server_settings
-            if ws_request["setting"] in server_settings:
-                return {ws_request["setting"]: server_settings[ws_request["setting"]], "type": "settings"}
+                return server_settings.model_dump()
+            if hasattr(server_settings, ws_request["setting"]):
+                return {ws_request["setting"]: getattr(server_settings, ws_request["setting"]), "type": "settings"}
             return {"action": "get", "success": False}
         case "set":
             if "setting" not in ws_request or "value" not in ws_request:
                 return None
-            if ws_request["setting"] in server_settings:
-                if str(type(ws_request["value"])) != server_settings_types[ws_request["setting"]]:
+            if hasattr(server_settings, ws_request["setting"]):
+                if type(ws_request["value"]) is not type(getattr(server_settings, ws_request["setting"])):
                     return None
-                if server_data["process"] is not None:
+                if server_data.process is not None:
                     await run_command(f"settings set General {ws_request["setting"]} {ws_request["value"]}")
                     return {"action": ws_request["setting"], "type": "settings"}
                 return {"action": "set", "success": False}
@@ -734,10 +722,10 @@ async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
         websockets.append(task)
-        data = server_data.copy()
+        data = server_data.model_dump()
         data.pop("process")
         await websocket.send(json.dumps(data))
-        data = server_settings.copy()
+        data = server_settings.model_dump()
         data["type"] = "settings"
         await websocket.send(json.dumps(data))
         async for data in broker.subscribe():
@@ -771,11 +759,11 @@ async def process_new_lines(new_lines: list[str]) -> None:
         if len(data) >= 3 and data[2][0] == "[" and data[2][-1] == "]":
             if data[2] == "[INFO]":
                 if "ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY" in line:
-                    server_data["connected"] = True
+                    server_data.connected = True
                 elif "BeamMP Server v" in line:
-                    server_data["version"] = line.split(" ")[-1]
+                    server_data.version = line.split(" ")[-1]
                 elif "Lua v" in line:
-                    server_data["lua_version"] = line.split()[-1]
+                    server_data.lua_version = line.split()[-1]
                 elif "Vehicle data network online on port " in line:
                     for i, word in enumerate(data):
                         if len(data) > i + 1 and data[i + 1].lower() == "clients":
@@ -784,12 +772,12 @@ async def process_new_lines(new_lines: list[str]) -> None:
                             except ValueError:
                                 continue
                             else:
-                                server_data["max_clients"] = int(word)
+                                server_data.max_clients = int(word)
                         elif data[i - 1].lower() == "port":
-                            server_data["port"] = word
+                            server_data.port = int(word)
 
                     # Get loaded settings
-                    if server_data["process"] is not None:
+                    if server_data.process is not None:
                         await run_command("settings list")
                 elif "Loaded " in line and " Mods" in line:
                     mods = data[-2]
@@ -798,7 +786,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                     except ValueError:
                         continue
                     else:
-                        server_data["mods"] = int(mods)
+                        server_data.mods = int(mods)
                 elif "Assigned ID " in line and " to " in line:
                     for i, word in enumerate(data):
                         if data[i - 1] == "ID":
@@ -807,27 +795,27 @@ async def process_new_lines(new_lines: list[str]) -> None:
                             except ValueError:
                                 continue
                             else:
-                                server_data["players"][word] = data[-1]
-                                server_data["player_logs"].append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
+                                server_data.players[word] = data[-1]
+                                server_data.player_logs.append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
                                 break
                 elif " is now synced!" in line:
                     for i, word in enumerate(data):
                         if data[i + 1] == "is":
-                            server_data["player_logs"].append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
+                            server_data.player_logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
                             break
                 elif " Connection Terminated" in line:
                     for i, word in enumerate(data):
                         if len(data) > i + 1 and data[i + 1] == "Connection":
-                            for key in server_data["players"]:
-                                name = server_data["players"][key]
+                            for key in server_data.players:
+                                name = server_data.players[key]
                                 if name == word:
-                                    del server_data["players"][key]
+                                    del server_data.players[key]
                                     break
-                            server_data["player_logs"].append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
+                            server_data.player_logs.append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
                             break
             elif data[2] == "[ERROR]":
                 if "bind() failed: Address already in use" in line:
-                    server_data["error"] = True
+                    server_data.error = True
             elif data[2] == "[CHAT]":
                 if data[3] == "<Server>":
                     sender = data[3].removeprefix("<").removesuffix(">")
@@ -838,24 +826,22 @@ async def process_new_lines(new_lines: list[str]) -> None:
                     sender = data[4].removeprefix("<").removesuffix(">")
                     receiver = "everyone"
                     message = " ".join(data[5:])
-                server_data["chat_logs"].append({"sender": sender, "receiver": receiver, "message": message, "timestamp": data[0:2]})
+                server_data.chat_logs.append({"sender": sender, "receiver": receiver, "message": message, "timestamp": data[0:2]})
             else:
                 print(f"Invalid log type {data[2]}")
         elif "::" in data[0]:
             if "General::" in data[0]:
                 setting = data[0].split("::")[-1]
-                if setting not in server_settings_types:
+                if not hasattr(server_settings, setting):
                     continue
                 value = line.split(" = ")[-1]
-                value_type = server_settings_types[setting]
-                if value_type == "bool":
+                server_settings.model_construct()
+                if value in ("true", "false"):
                     value = value == "true"
-                elif value_type == "int":
-                    try:
+                else:
+                    with contextlib.suppress(ValueError):
                         value = int(value)
-                    except ValueError:
-                        continue
-                server_settings[setting] = value
+                setattr(server_settings, setting, value)
             elif "Misc::" in data[0]:
                 continue
             else:
@@ -869,7 +855,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                 if not mod.endswith(".json"):
                     mod_count += 1
 
-            server_data["mods"] = mod_count
+            server_data.mods = mod_count
         elif (data[0] == "Kicked" and data[1] == "player") or "Error: No player with name matching" in line:
             continue
         else:
@@ -884,15 +870,15 @@ async def monitor_logs() -> None:
 
     while True:
         await asyncio.sleep(0.5)
-        if server_data["process"] is not None and server_data["process"].returncode is None:
+        if server_data.process is not None and server_data.process.returncode is None:
             async with aiofiles.open("Server.log") as file:
                 output = await file.read()
 
                 # Save old data and settings to compare with afterwards
-                old_data = server_data.copy()
-                old_data.pop("process")
-                old_data = copy.deepcopy(old_data)
-                old_settings = server_settings.copy()
+                old_data_dict = server_data.model_dump()
+                old_data_dict["process"] = None # Set process to None before deep copying because it is un-pickleable
+                old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
+                old_settings = server_settings.model_copy(deep=True)
 
                 new_lines = await check_lines(old_lines, output.splitlines())
                 old_lines = output.splitlines()
@@ -900,7 +886,7 @@ async def monitor_logs() -> None:
                     await process_new_lines(new_lines)
                     await send_changed_data(old_data, old_settings)
                     print(f"Processed {len(new_lines)} new lines")
-        elif server_data["process"] is not None:
+        elif server_data.process is not None:
             await reset_server_data()
 
 async def monitor_temp_files() -> None:
@@ -952,8 +938,8 @@ async def shutdown():
     if hasattr(app, "tasks"):
         for task in app.tasks:
             task.cancel()
-    if server_data["process"] is not None and server_data["process"].returncode is None:
-        server_data["process"].terminate()
+    if server_data.process is not None and server_data.process.returncode is None:
+        server_data.process.terminate()
 
 # Close websockets upon shutdown
 def close_sockets(*_):
