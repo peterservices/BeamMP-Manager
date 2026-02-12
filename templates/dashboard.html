@@ -74,6 +74,10 @@
                             <div class="d-flex justify-content-evenly">
                                 <button id="serverMessageButton" type="button" class="btn btn-secondary">Server Message</button>
                             </div>
+                            <br>
+                            <div class="d-flex justify-content-evenly">
+                                <button id="settingButton" type="button" class="btn btn-orange">Settings</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -296,6 +300,24 @@
                         <a href="">
                             <button id="reloadButton" type="button" class="btn btn-orange">Reload</button>
                         </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="settingModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="settingModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="settingModalLabel">Settings</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="settingForm">
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="settingModalButton" type="button" class="btn btn-orange">Save Changes</button>
                     </div>
                 </div>
             </div>
