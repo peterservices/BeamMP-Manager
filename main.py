@@ -698,7 +698,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                     del mods_disabled[ws_request["delete"]]
                 to_write = json.dumps(mods_disabled)
                 async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
-                        await file.write(to_write)
+                    await file.write(to_write)
             else:
                 # Reload mods to update mods list if deleted mod was enabled
                 await run_command("reloadmods")
