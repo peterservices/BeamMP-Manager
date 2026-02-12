@@ -5,7 +5,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 > [!IMPORTANT]
 > This script has only been tested with Linux.
 > 
-> This script is intended for managing a BeamMP server on a remote server. It is recommended configure this behind a reverse proxy such as [Nginx](https://nginx.org/).
+> This script is intended for managing a BeamMP server on a remote server. It is recommended to configure this behind a reverse proxy such as [Nginx](https://nginx.org/).
 
 ### **Prerequisites**
 
