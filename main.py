@@ -11,14 +11,15 @@ import signal
 import typing
 import zipfile
 from collections.abc import AsyncGenerator
+from secrets import token_urlsafe
 from typing import Any
 
 import aiofiles
 import aiofiles.os as aioos
 import discordoauth2
 import vt
-from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict
+from dotenv import find_dotenv, load_dotenv, set_key
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from quart import (
     Quart,
     Response,
@@ -42,26 +43,39 @@ from quart_auth import (
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import safe_join, secure_filename
 
-authorized_users = [0, 0]
+DOTENV_PATH = find_dotenv()
+load_dotenv(dotenv_path=DOTENV_PATH)
 
-load_dotenv()
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+if CLIENT_ID is None or CLIENT_SECRET is None:
+    raise KeyError("Both CLIENT_ID and CLIENT_SECRET envirnoment variables are required for Discord login.")
 
-oauth_client = discordoauth2.AsyncClient(id=0, secret=os.getenv("CLIENT_SECRET"), redirect="https://example.com/redirect", bot_token="")
+SECRET_KEY = os.getenv("SECRET_KEY")
+if SECRET_KEY is None:
+    SECRET_KEY = token_urlsafe() # Generate a new SECRET_KEY
+    if DOTENV_PATH != "":
+        set_key(DOTENV_PATH, "SECRET_KEY", SECRET_KEY) # Save the SECRET_KEY to preserve sessions across restarts
+
+VT_KEY = os.getenv("VT_KEY")
+
+oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect="https://example.com/redirect", bot_token="")
 
 app = Quart(__name__)
-app.secret_key = os.getenv("SECRET_KEY")
+app.secret_key = SECRET_KEY
 
 QuartAuth(app, duration=30 * 24 * 60 * 60)
 
-base = "/beammp"
-
 class LocalConfiguration(BaseModel):
-    server_path: str = "BeamMP-Server"
+    beammp_executable_path: str = "BeamMP-Server"
+    url_base_path: str = "/beammp"
+    virustotal_scanning: bool = True
+    authorized_users: list[int] = []
 
 class ServerData(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    process: asyncio.subprocess.Process | None = None
+    process: asyncio.subprocess.Process | None = Field(None, exclude=True)
     connected: bool = False
     error: bool = False
     version: str | None = None
@@ -88,19 +102,27 @@ class ServerSettings(BaseModel):
     Debug: bool | None = None
     ResourceFolder: str | None = None
 
+class TempFile(BaseModel):
+    def _validate_hash_obj(obj: object):
+        if hasattr(obj, "update") and hasattr(obj, "digest") and hasattr(obj, "hexdigest") and hasattr(obj, "copy"):
+            return obj
+        raise ValueError("Must be a HASH object!")
+
+    total_bytes: int
+    user: str
+    hasher: typing.Annotated[object, AfterValidator(_validate_hash_obj)] = hashlib.sha256()
+    complete: bool = False
+    last_write: datetime.datetime | None = None
+
 class Broker:
     def __init__(self) -> None:
         self.connections: set[asyncio.Queue] = set()
 
     async def event(self, data: dict[str, Any] | None) -> None:
-        # Catch shutdown request
-        if data is None:
-            for connection in self.connections:
-                await connection.put(None)
-            return
+        if data is not None: # If data is None, it is a shutdown request and shouldn't be serialized
+            data = json.dumps(data)
 
         # Send event data
-        data = json.dumps(data)
         for connection in self.connections:
             await connection.put(data)
 
@@ -119,11 +141,11 @@ if not os.path.exists("config.json"):
     with open("config.json", "x") as file:
         file.write(to_write)
 else:
-    with open("config.json", "r+") as file:
+    with open("config.json") as file:
         config_str = file.read()
     configuration = LocalConfiguration.model_validate_json(config_str)
-    if configuration and os.path.exists(configuration.server_path):
-        configuration.server_path = os.path.abspath(configuration.server_path)
+    if configuration and os.path.exists(configuration.beammp_executable_path):
+        configuration.beammp_executable_path = os.path.abspath(configuration.beammp_executable_path)
 
     # Save any new changes to disk
     if configuration.model_dump_json() != config_str:
@@ -135,7 +157,7 @@ server_data = ServerData(process=None, connected=False, error=False, version=Non
 server_settings = ServerSettings()
 broker = Broker()
 websockets: list[asyncio.Task] = []
-temp_files: dict[str, dict[str, str | int | datetime.datetime]] = {}
+temp_files: dict[str, TempFile] = {}
 
 async def run_command(command_str: str) -> None:
     """
@@ -151,9 +173,7 @@ async def run_command(command_str: str) -> None:
 async def send_changed_data(old_data: ServerData, old_settings: ServerSettings | None = None) -> None:
     changes = {}
     server_data_dict = server_data.model_dump()
-    server_data_dict.pop("process")
     old_data_dict = old_data.model_dump()
-    old_data_dict.pop("process")
     for key in old_data_dict:
         if server_data_dict[key] != old_data_dict[key]:
             changes[key] = server_data_dict[key]
@@ -173,14 +193,14 @@ async def send_changed_data(old_data: ServerData, old_settings: ServerSettings |
         changes["type"] = "settings"
         await broker.event(changes)
 
-async def reset_server_data() -> None :
+def reset_server_data() -> None :
     """
     Resets server_data to its default state.
     """
     global server_data
     server_data = ServerData()
 
-async def reset_server_settings() -> None:
+def reset_server_settings() -> None:
     """
     Clears all settings from server_settings.
     """
@@ -191,32 +211,31 @@ async def start_server() -> None:
     """
     Starts the BeamMP Server.
     """
-    old_data_dict = server_data.model_dump()
-    old_data_dict["process"] = None # Set process to None before deep copying because it is un-pickleab
+    old_data_dict = server_data.model_dump(exclude={"process"})
     old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
     async with aiofiles.open("Server.log", "w") as file:
         await file.writelines("")
-    await reset_server_settings()
-    await reset_server_data()
+    reset_server_settings()
+    reset_server_data()
     await send_changed_data(old_data)
-    server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.server_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
 
 # -- Website routes --
 
-@app.route(f"{base}/")
+@app.route(f"{configuration.url_base_path}/")
 async def main_page():
-    return redirect(f"{base}/dashboard")
+    return redirect(f"{configuration.url_base_path}/dashboard")
 
-@app.route(f"{base}/dashboard")
+@app.route(f"{configuration.url_base_path}/dashboard")
 @login_required
 async def dashboard():
-    return await render_template("dashboard.html", base=base)
+    return await render_template("dashboard.html", base=configuration.url_base_path)
 
-@app.route(f"{base}/guest_dashboard")
+@app.route(f"{configuration.url_base_path}/guest_dashboard")
 async def guest_dashboard():
-    return await render_template("guest_dashboard.html", base=base)
+    return await render_template("guest_dashboard.html", base=configuration.url_base_path)
 
-@app.route(f"{base}/mods_list")
+@app.route(f"{configuration.url_base_path}/mods_list")
 async def guest_mods():
     mods = None
     async with aiofiles.open("Resources/Client/mods.json") as file:
@@ -230,15 +249,15 @@ async def guest_mods():
         mods = {}
     return mods
 
-@app.route(f"{base}/login")
+@app.route(f"{configuration.url_base_path}/login")
 async def login():
     uri = oauth_client.generate_uri(skip_prompt=True, scope=["identify"])
     error = session.get("error", "")
     if "error" in session:
         session.pop("error")
-    return await render_template("login.html", base=base, uri=uri, error=error)
+    return await render_template("login.html", base=configuration.url_base_path, uri=uri, error=error)
 
-@app.route(f"{base}/login/oauth2")
+@app.route(f"{configuration.url_base_path}/login/oauth2")
 async def oauth_login():
     session.permanent = True
     app.permanent_session_lifetime = datetime.timedelta(seconds=30)
@@ -246,25 +265,25 @@ async def oauth_login():
 
     code = request.args.get("code")
     if code is None:
-        return redirect(f"{base}/login")
+        return redirect(f"{configuration.url_base_path}/login")
 
     access = await oauth_client.exchange_code(code)
     identify = await access.fetch_identify()
     if "id" in identify:
-        if int(identify["id"]) in authorized_users:
+        if int(identify["id"]) in configuration.authorized_users:
             auth = AuthUser(identify["id"])
             login_user(auth, True)
             session.pop("error")
-            return redirect(f"{base}/dashboard")
+            return redirect(f"{configuration.url_base_path}/dashboard")
         session["error"] = "unauthorized"
-    return redirect(f"{base}/login")
+    return redirect(f"{configuration.url_base_path}/login")
 
-@app.route(f"{base}/logout")
+@app.route(f"{configuration.url_base_path}/logout")
 async def logout():
     logout_user()
-    return redirect(f"{base}/login")
+    return redirect(f"{configuration.url_base_path}/login")
 
-@app.route(f"{base}/static/<string:folder>/<string:filename>")
+@app.route(f"{configuration.url_base_path}/static/<string:folder>/<string:filename>")
 async def get_static_file(folder: str, filename: str):
     authenticated = await current_user.is_authenticated
     if folder == "css":
@@ -283,7 +302,7 @@ async def get_static_file(folder: str, filename: str):
         return await send_file(path)
     return abort(404)
 
-@app.route(f"{base}/mods/<string:filename>")
+@app.route(f"{configuration.url_base_path}/mods/<string:filename>")
 async def get_mod_file(filename: str):
     path = safe_join("Resources/Client/", filename)
     if path is None or (path is not None and not await aioos.path.exists(path)):
@@ -362,7 +381,7 @@ def check_zip_sync(path) -> bool:
         valid = False
     return valid
 
-@app.route(f"{base}/upload", methods=["POST"])
+@app.route(f"{configuration.url_base_path}/upload", methods=["POST"])
 @login_required
 async def upload():
     content_range = request.headers.get("Content-Range")
@@ -388,9 +407,9 @@ async def upload():
     # Check if chunk is a request to abort the upload
     if chunk == "false":
         if filename in temp_files:
-            if temp_files[filename]["user"] != current_user.auth_id:
+            if temp_files[filename].user != current_user.auth_id:
                 return abort(403)
-            if temp_files[filename]["total_bytes"] == total:
+            if temp_files[filename].total_bytes == total:
                 path = safe_join("Resources/Client.temp/", filename + ".part")
                 await aioos.remove(path)
                 del temp_files[filename]
@@ -416,18 +435,18 @@ async def upload():
         if filename in temp_files:
             return abort(409)
 
-        temp_files[filename] = {"total_bytes": total, "user": current_user.auth_id, "hasher": hashlib.sha256(), "complete": False}
-    elif filename in temp_files and temp_files[filename]["user"] != current_user.auth_id:
+        temp_files[filename] = TempFile(total_bytes=total, user=current_user.auth_id)
+    elif filename in temp_files and temp_files[filename].user != current_user.auth_id:
         return abort(403)
-    elif filename not in temp_files or temp_files[filename]["total_bytes"] != total:
+    elif filename not in temp_files or temp_files[filename].total_bytes != total:
         return abort(400)
-    elif filename in temp_files and temp_files[filename]["complete"]:
+    elif filename in temp_files and temp_files[filename].complete:
         return abort(409)
 
-    temp_files[filename]["last_write"] = datetime.datetime.now()
+    temp_files[filename].last_write = datetime.datetime.now()
 
     towrite: bytes = chunk.read()
-    temp_files[filename]["hasher"].update(towrite)
+    temp_files[filename].hasher.update(towrite)
     async with aiofiles.open(temp_path, "ab") as f:
         await f.seek(start)
         await f.write(towrite)
@@ -441,8 +460,8 @@ async def upload():
                 return abort(415)
 
     if end + 1 == total:
-        hash = temp_files[filename]["hasher"].hexdigest()
-        temp_files[filename]["complete"] = True
+        hash = temp_files[filename].hasher.hexdigest()
+        temp_files[filename].complete = True
         # Check if the zip file is valid
         valid = await asyncio.to_thread(check_zip_sync, temp_path)
         if not valid:
@@ -450,47 +469,50 @@ async def upload():
             return abort(415)
 
         # Check if file is malicious with VirusTotal
-        async with vt.Client(os.getenv("VT_KEY")) as client: # Regular 'with vt.Client()' doesn't work for some reason so we use 'async with vt.Client()'
-            try:
-                vt_file = await client.get_object_async(f"/files/{hash}")
-                if vt_file.error is not None:
-                    raise vt.error.APIError("NotFoundError", "Analysis stats not found.") # Manually raise a NotFoundError to trigger a scan if there is an error
-                analysis_stats = vt_file.last_analysis_stats
-                total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
-                bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
-                if total == 0 or bad / total > 0.25:
-                    await aioos.remove(temp_path)
-                    del temp_files[filename]
-                    return abort(422) # Refuse to upload the file if the file is too suspicious
-            except vt.error.APIError as error:
-                if error.code == "NotFoundError":
-                    if await aioos.path.getsize(temp_path) >= 650000000: # Don't allow to upload files over 650MB to VirusTotal
-                        return abort(413)
-                    with open(temp_path, "rb") as file:
-                        try:
-                            await client.scan_file_async(file, wait_for_completion=True)
-                            vt_file = await client.get_object_async(f"/files/{hash}")
-                        except vt.error.APIError as error:
-                            await aioos.remove(temp_path)
-                            del temp_files[filename]
-                            raise error
+        if configuration.virustotal_scanning:
+            if VT_KEY is None:
+                raise KeyError("The VT_KEY environment variable is required for VirusTotal scanning.")
+            async with vt.Client(VT_KEY) as client: # Regular 'with vt.Client()' doesn't work for some reason so we use 'async with vt.Client()'
+                try:
+                    vt_file = await client.get_object_async(f"/files/{hash}")
+                    if vt_file.error is not None:
+                        raise vt.error.APIError("NotFoundError", "Analysis stats not found.") # Manually raise a NotFoundError to trigger a scan if there is an error
+                    analysis_stats = vt_file.last_analysis_stats
+                    total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
+                    bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
+                    if total == 0 or bad / total > 0.25:
+                        await aioos.remove(temp_path)
+                        del temp_files[filename]
+                        return abort(422) # Refuse to upload the file if the file is too suspicious
+                except vt.error.APIError as error:
+                    if error.code == "NotFoundError":
+                        if await aioos.path.getsize(temp_path) >= 650000000: # Don't allow to upload files over 650MB to VirusTotal
+                            return abort(413)
+                        with open(temp_path, "rb") as file:
+                            try:
+                                await client.scan_file_async(file, wait_for_completion=True)
+                                vt_file = await client.get_object_async(f"/files/{hash}")
+                            except vt.error.APIError as error:
+                                await aioos.remove(temp_path)
+                                del temp_files[filename]
+                                raise error
 
-                        if vt_file.error is not None:
-                            await aioos.remove(temp_path)
-                            del temp_files[filename]
-                            return abort(500)
+                            if vt_file.error is not None:
+                                await aioos.remove(temp_path)
+                                del temp_files[filename]
+                                return abort(500)
 
-                        analysis_stats = vt_file.last_analysis_stats
-                        total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
-                        bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
-                        if total == 0 or bad / total > 0.25:
-                            await aioos.remove(temp_path)
-                            del temp_files[filename]
-                            return abort(422) # Refuse to upload the file if the file is too suspicious
-                else:
-                    await aioos.remove(temp_path)
-                    del temp_files[filename]
-                    raise error
+                            analysis_stats = vt_file.last_analysis_stats
+                            total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
+                            bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
+                            if total == 0 or bad / total > 0.25:
+                                await aioos.remove(temp_path)
+                                del temp_files[filename]
+                                return abort(422) # Refuse to upload the file if the file is too suspicious
+                    else:
+                        await aioos.remove(temp_path)
+                        del temp_files[filename]
+                        raise error
 
         final_path = safe_join("Resources/Client/", filename)
         shutil.move(temp_path, final_path)
@@ -512,9 +534,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 return None
             match ws_request["request"]:
                 case "all":
-                    data = server_data.model_dump()
-                    data.pop("process")
-                    return data
+                    return server_data.model_dump()
                 case "connected":
                     return {"connected": server_data.connected}
                 case "error":
@@ -569,7 +589,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 case "stop":
                     if server_data.process is not None:
                         server_data.process.terminate()
-                        await reset_server_data()
+                        reset_server_data()
                         return {"action": "stop"}
                     return {"action": "stop", "success": False}
                 case "kick":
@@ -716,15 +736,14 @@ async def receive() -> None:
             result["success"] = True
         await websocket.send(json.dumps(result))
 
-@app.websocket(f"{base}/ws")
+@app.websocket(f"{configuration.url_base_path}/ws")
 @login_required
 async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
         websockets.append(task)
-        data = server_data.model_dump()
-        data.pop("process")
-        await websocket.send(json.dumps(data))
+        data = server_data.model_dump_json()
+        await websocket.send(data)
         data = server_settings.model_dump()
         data["type"] = "settings"
         await websocket.send(json.dumps(data))
@@ -741,7 +760,7 @@ async def websocket_connect():
 # Redirect to login page if unauthorized
 @app.errorhandler(Unauthorized)
 async def redirect_to_login(*_):
-    return redirect(f"{base}/login")
+    return redirect(f"{configuration.url_base_path}/login")
 
 async def check_lines(old: list[str], output: list[str]) -> list[str]:
     new_lines = []
@@ -887,7 +906,7 @@ async def monitor_logs() -> None:
                     await send_changed_data(old_data, old_settings)
                     print(f"Processed {len(new_lines)} new lines")
         elif server_data.process is not None:
-            await reset_server_data()
+            reset_server_data()
 
 async def monitor_temp_files() -> None:
     """
@@ -896,7 +915,7 @@ async def monitor_temp_files() -> None:
     while True:
         await asyncio.sleep(1)
         for filename, data in temp_files.items():
-            if data["last_write"] is not None and not data["complete"] and data["last_write"] + datetime.timedelta(minutes=1) < datetime.datetime.now():
+            if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now():
                 path = safe_join("Resources/Client.temp/", filename + ".part")
                 if await aioos.path.exists(path):
                     await aioos.remove(path)
