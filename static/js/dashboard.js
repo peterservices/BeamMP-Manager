@@ -16,6 +16,7 @@ const messageModal = document.getElementById("messageModal");
 const deleteModal = document.getElementById("deleteModal");
 const restartModal = document.getElementById("restartModal");
 const reloadModal = document.getElementById("reloadModal");
+const settingModal = document.getElementById("settingModal");
 
 const uploadModalButton = document.getElementById("uploadModalButton");
 const kickModalLabel = document.getElementById("kickModalLabel");
@@ -25,6 +26,7 @@ const formFilename = document.getElementById("formFilename");
 const formFile = document.getElementById("formFile");
 const kickReason = document.getElementById("kickReason");
 const message = document.getElementById("message");
+const settingForm = document.getElementById("settingForm");
 
 const enabledModsLabel = document.getElementById("enabledModsLabel");
 const disabledModsLabel = document.getElementById("disabledModsLabel");
@@ -47,6 +49,7 @@ const messageModalBS = bootstrap.Modal.getOrCreateInstance(messageModal);
 const deleteModalBS = bootstrap.Modal.getOrCreateInstance(deleteModal);
 const restartModalBS = bootstrap.Modal.getOrCreateInstance(restartModal);
 const reloadModalBS = bootstrap.Modal.getOrCreateInstance(reloadModal);
+const settingModalBS = bootstrap.Modal.getOrCreateInstance(settingModal);
 
 const enabledModsTooltip = new bootstrap.Tooltip(enabledModsLabel);
 const disabledModsTooltip = new bootstrap.Tooltip(disabledModsLabel);
@@ -151,6 +154,71 @@ function showReloadModal() {
         restartModalBS.hide();
     }
     reloadModalBS.show();
+}
+
+function showSettingModal() {
+    // Delete previous form inputs
+    let settingLength = settingForm.children.length;
+    for (let i = 0; i < settingLength; i++) {
+        settingForm.children[0].remove();
+    }
+
+    for (let key in server_settings) {
+        let value = server_settings[key]
+        switch (typeof value) {
+            case "boolean":
+                let bool_div = document.createElement("div");
+                bool_div.className = "form-check form-switch";
+
+                let bool_label = document.createElement("label");
+                bool_label.for = key;
+                bool_label.className = "form-check-label";
+                bool_label.innerHTML = key;
+
+                let bool_input = document.createElement("input");
+                bool_input.type = "checkbox";
+                bool_input.id = key;
+                bool_input.className = "form-check-input";
+                bool_input.checked = value;
+
+                bool_div.appendChild(bool_label);
+                bool_div.appendChild(bool_input);
+                settingForm.appendChild(bool_div);
+                break;
+            case "number":
+                let num_label = document.createElement("label");
+                num_label.for = key;
+                num_label.className = "form-label";
+                num_label.innerHTML = key;
+
+                let num_input = document.createElement("input");
+                num_input.type = "number";
+                num_input.id = key;
+                num_input.className = "form-control";
+                num_input.value = value;
+
+                settingForm.appendChild(num_label);
+                settingForm.appendChild(num_input);
+                break;
+            case "string":
+                let str_label = document.createElement("label");
+                str_label.for = key;
+                str_label.className = "form-label";
+                str_label.innerHTML = key;
+
+                let str_input = document.createElement("input");
+                str_input.type = "text";
+                str_input.id = key;
+                str_input.className = "form-control";
+                str_input.value = value;
+
+                settingForm.appendChild(str_label);
+                settingForm.appendChild(str_input);
+                break;
+        }
+    }
+
+    settingModalBS.show();
 }
 
 function formatBytes(bytes) {
@@ -675,6 +743,15 @@ document.getElementById("messageForm").addEventListener("submit", (event) => {
     event.preventDefault();
     messageModalBS.hide();
     connection.send(JSON.stringify({"type": "command", "command": "say", "message": message.value}));
+});
+
+document.getElementById("settingButton").addEventListener("click", () => {
+    showSettingModal();
+});
+
+document.getElementById("settingModalButton").addEventListener("click", () => {
+    settingModalBS.hide();
+    // TODO Send updated values to server.
 });
 
 document.getElementById("uploadButton").addEventListener("click", () => {
