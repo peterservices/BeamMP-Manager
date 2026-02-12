@@ -49,7 +49,7 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 if CLIENT_ID is None or CLIENT_SECRET is None:
-    raise KeyError("Both CLIENT_ID and CLIENT_SECRET envirnoment variables are required for Discord login.")
+    raise KeyError("Both the CLIENT_ID and CLIENT_SECRET envirnoment variables are required for Discord login.")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if SECRET_KEY is None:
@@ -59,8 +59,6 @@ if SECRET_KEY is None:
 
 VT_KEY = os.getenv("VT_KEY")
 
-oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect="https://example.com/redirect", bot_token="")
-
 app = Quart(__name__)
 app.secret_key = SECRET_KEY
 
@@ -69,6 +67,7 @@ QuartAuth(app, duration=30 * 24 * 60 * 60)
 class LocalConfiguration(BaseModel):
     beammp_executable_path: str = "BeamMP-Server"
     url_base_path: str = "/beammp"
+    discord_oauth2_redirect_url: str = ""
     virustotal_scanning: bool = True
     authorized_users: list[int] = []
 
@@ -103,7 +102,7 @@ class ServerSettings(BaseModel):
     ResourceFolder: str | None = None
 
 class TempFile(BaseModel):
-    def _validate_hash_obj(obj: object):
+    def _validate_hash_obj(obj: object): # Check if the object has the attributes of a HASH object, because there is no HASH type to compare against
         if hasattr(obj, "update") and hasattr(obj, "digest") and hasattr(obj, "hexdigest") and hasattr(obj, "copy"):
             return obj
         raise ValueError("Must be a HASH object!")
@@ -152,6 +151,8 @@ else:
         to_write = configuration.model_dump_json(indent=5)
         with open("config.json", "w") as file:
             file.write(to_write)
+
+oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect=configuration.discord_oauth2_redirect_url, bot_token="")
 
 server_data = ServerData(process=None, connected=False, error=False, version=None, lua_version=None, port=None, max_clients=None, mods=0, players={}, player_logs=[], chat_logs=[])
 server_settings = ServerSettings()
@@ -251,11 +252,15 @@ async def guest_mods():
 
 @app.route(f"{configuration.url_base_path}/login")
 async def login():
-    uri = oauth_client.generate_uri(skip_prompt=True, scope=["identify"])
     error = session.get("error", "")
     if "error" in session:
         session.pop("error")
-    return await render_template("login.html", base=configuration.url_base_path, uri=uri, error=error)
+    return await render_template("login.html", base=configuration.url_base_path, error=error)
+
+@app.route(f"{configuration.url_base_path}/login/uri")
+async def login_uri():
+    uri = oauth_client.generate_uri(skip_prompt=True, scope=["identify"])
+    return redirect(uri)
 
 @app.route(f"{configuration.url_base_path}/login/oauth2")
 async def oauth_login():
