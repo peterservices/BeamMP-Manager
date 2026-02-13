@@ -153,6 +153,9 @@ function showReloadModal() {
     if (!restartModalBS.ariaHidden) {
         restartModalBS.hide();
     }
+    if (!settingModalBS.ariaHidden) {
+        settingModalBS.hide();
+    }
     reloadModalBS.show();
 }
 
@@ -169,6 +172,7 @@ function showSettingModal() {
             case "boolean":
                 let bool_div = document.createElement("div");
                 bool_div.className = "form-check form-switch";
+                bool_div.style = "margin-bottom: 10px;";
 
                 let bool_label = document.createElement("label");
                 bool_label.for = key;
@@ -177,9 +181,16 @@ function showSettingModal() {
 
                 let bool_input = document.createElement("input");
                 bool_input.type = "checkbox";
+                bool_input.name = "switch";
                 bool_input.id = key;
                 bool_input.className = "form-check-input";
                 bool_input.checked = value;
+                bool_input.changed = false;
+
+                bool_input.onchange = () => {
+                    bool_input.changed = bool_input.checked != value;
+                    bool_label.style = ((bool_input.changed) ? "font-style: italic;" : "");
+                }
 
                 bool_div.appendChild(bool_label);
                 bool_div.appendChild(bool_input);
@@ -195,7 +206,14 @@ function showSettingModal() {
                 num_input.type = "number";
                 num_input.id = key;
                 num_input.className = "form-control";
+                num_input.style = "margin-bottom: 10px;";
                 num_input.value = value;
+                num_input.changed = false;
+
+                num_input.onchange = () => {
+                    num_input.changed = num_input.value != value;
+                    num_label.style = ((num_input.changed) ? "font-style: italic;" : "");
+                }
 
                 settingForm.appendChild(num_label);
                 settingForm.appendChild(num_input);
@@ -210,7 +228,14 @@ function showSettingModal() {
                 str_input.type = "text";
                 str_input.id = key;
                 str_input.className = "form-control";
+                str_input.style = "margin-bottom: 10px;";
                 str_input.value = value;
+                str_input.changed = false;
+
+                str_input.onchange = () => {
+                    str_input.changed = str_input.value != value;
+                    str_label.style = ((str_input.changed) ? "font-style: italic;" : "");
+                }
 
                 settingForm.appendChild(str_label);
                 settingForm.appendChild(str_input);
@@ -277,7 +302,7 @@ function createModDiv(type, modName, filesize) {
 
     let download = document.createElement("button");
     download.type = "button";
-    download.className = "btn " + ((type == "enabled")? "disable-button" : "enable-button");
+    download.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
     aDownload.appendChild(download);
 
     let image = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -298,8 +323,8 @@ function createModDiv(type, modName, filesize) {
 
     let button = document.createElement("button");
     button.type = "button";
-    button.className = "btn " + ((type == "enabled")? "disable-button" : "enable-button");
-    button.innerHTML = ((type == "enabled")? "Disable" : "Enable");
+    button.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
+    button.innerHTML = ((type == "enabled") ? "Disable" : "Enable");
     aButton.appendChild(button);
 
     if (type == "disabled") {
@@ -500,7 +525,7 @@ function refreshChatLogs(logs) {
 
     // Add logs
     for (let i = logs.length - 1; i >= 0; i--) {
-        let log = createLogDiv(logs[i]["sender"] + ((logs[i]["receiver"] != "everyone")? " (to " + logs[i]["receiver"] + ")" : "") + ": " + logs[i]["message"], timestamp=logs[i]["timestamp"]);
+        let log = createLogDiv(logs[i]["sender"] + ((logs[i]["receiver"] != "everyone") ? " (to " + logs[i]["receiver"] + ")" : "") + ": " + logs[i]["message"], timestamp=logs[i]["timestamp"]);
         log.style = "margin-top: 2%;";
         chatLogs.appendChild(log);
     }
@@ -564,15 +589,15 @@ connection.addEventListener("message", (event) => {
                             }
                             if (server_data["connected"]) {
                                 serverStatus.innerHTML = "Server Online";
-                                serverStatus.style = "color: #008000";
+                                serverStatus.style = "color: #008000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
                             } else {
                                 serverStatus.innerHTML = "Server Starting";
-                                serverStatus.style = "color: #FFDE21";
+                                serverStatus.style = "color: #FFDE21; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
                             }
                         } else if (key == "error" && server_data["error"]) {
                             // Update server connection text
                             serverStatus.innerHTML = "Server Error";
-                            serverStatus.style = "color: #FF0000";
+                            serverStatus.style = "color: #FF0000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
                         }
                     }
                 }
@@ -709,7 +734,7 @@ document.getElementById("cancelUploadX").addEventListener("click", () => {
 document.getElementById("kickForm").addEventListener("submit", (event) => {
     event.preventDefault();
     kickModalBS.hide();
-    let kickReasonValue = ((kickReason.value == "")? "Kicked by admin" : kickReason.value);
+    let kickReasonValue = ((kickReason.value == "") ? "Kicked by admin" : kickReason.value);
     connection.send(JSON.stringify({"type": "command", "command": "kick", "player": kickModalLabel.innerHTML.split(" ")[1], "reason": kickReasonValue}));
 });
 
@@ -749,9 +774,24 @@ document.getElementById("settingButton").addEventListener("click", () => {
     showSettingModal();
 });
 
-document.getElementById("settingModalButton").addEventListener("click", () => {
+document.getElementById("settingModalButton").addEventListener("click", (event) => {
+    event.preventDefault();
     settingModalBS.hide();
-    // TODO Send updated values to server.
+    
+    let settingLength = settingForm.children.length;
+    for (let i = 0; i < settingLength; i++) {
+        let child = settingForm.children[i];
+        if (child.tagName == "INPUT" && child.changed) {
+            let value = ((child.type=="text") ? child.value : Number(child.value));
+            connection.send(JSON.stringify({"type": "set", "setting": child.id, "value": value}));
+        } else if (child.tagName == "DIV") {
+            let checkbox = child.children.namedItem("switch");
+            if (checkbox && checkbox.changed) {
+                connection.send(JSON.stringify({"type": "set", "setting": checkbox.id, "value": checkbox.checked}));
+            }
+        }
+    }
+    showToast("info", "Saved setting changes.");
 });
 
 document.getElementById("uploadButton").addEventListener("click", () => {
