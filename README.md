@@ -34,6 +34,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
      "url_base_path": "/beammp",
      "discord_oauth2_redirect_url": "",
      "virustotal_scanning": true,
+     "preserve_settings_changes": true,
      "authorized_users": []
 }
 ```
@@ -44,6 +45,8 @@ url_base_path - The base path to use for accessing the web manager. This is usef
 discord_oauth2_redirect_url - The public URL to the web manager's `/login/oauth2` page. This URL must be added on the Discord Developer Portal under OAuth2.
 
 virustotal_scanning - Whether mod uploads should be checked by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
+
+preserve_settings_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
 
 authorized_users - The Discord user IDs of the people who should be able to login to the web manager.
 
@@ -64,6 +67,7 @@ authorized_users - The Discord user IDs of the people who should be able to logi
   * Log when players finish downloading mods from the server
   * Log chat messages
 * And More
+  * View and change server settings
   * Restart server
   * Manually reload mods
   * Send chat messages as the server
@@ -71,10 +75,12 @@ authorized_users - The Discord user IDs of the people who should be able to logi
 
 ### **Planned Features**
 
-* View and change server settings
+* Map setting dropdown
 * Historical logs that save over restarts
 * More methods of authentication (Google)
 * Permission levels
+* Option to not automatically start the server (Maybe a process-detached read-only mode?)
+* Otion to disable public dashboard
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
