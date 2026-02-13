@@ -184,6 +184,7 @@ function showSettingModal() {
                 bool_input.name = "switch";
                 bool_input.id = key;
                 bool_input.className = "form-check-input";
+                bool_input.switch = true;
                 bool_input.checked = value;
                 bool_input.changed = false;
 
