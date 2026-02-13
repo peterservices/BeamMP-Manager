@@ -17,6 +17,7 @@ from typing import Any
 import aiofiles
 import aiofiles.os as aioos
 import discordoauth2
+import tomlkit
 import vt
 from dotenv import find_dotenv, load_dotenv, set_key
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
@@ -69,6 +70,7 @@ class LocalConfiguration(BaseModel):
     url_base_path: str = "/beammp"
     discord_oauth2_redirect_url: str = ""
     virustotal_scanning: bool = True
+    preserve_settings_changes: bool = True
     authorized_users: list[int] = []
 
 class ServerData(BaseModel):
@@ -87,6 +89,7 @@ class ServerData(BaseModel):
     chat_logs: list[dict[str, str | list]] = []
 
 class ServerSettings(BaseModel):
+    InformationPacket: bool | None = None
     AllowGuests: bool | None = None
     Description: str | None = None
     Tags: str | None = None
@@ -719,7 +722,18 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 if type(ws_request["value"]) is not type(getattr(server_settings, ws_request["setting"])):
                     return None
                 if server_data.process is not None:
-                    await run_command(f"settings set General {ws_request["setting"]} {ws_request["value"]}")
+                    await run_command(f"settings set General {ws_request["setting"]} {json.dumps(ws_request["value"])}")
+
+                    # Save the setting change to disk so it is preserved after restart
+                    if configuration.preserve_settings_changes and os.path.exists("ServerConfig.toml"):
+                        async with aiofiles.open("ServerConfig.toml") as file:
+                            toml_str = await file.read()
+                        toml = tomlkit.parse(toml_str)
+                        toml["General"][ws_request["setting"]] = ws_request["value"]
+                        to_write = tomlkit.dumps(toml)
+                        async with aiofiles.open("ServerConfig.toml", "w") as file:
+                            await file.write(to_write)
+
                     return {"action": ws_request["setting"], "type": "settings"}
                 return {"action": "set", "success": False}
         case "ping":
@@ -858,7 +872,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                 setting = data[0].split("::")[-1]
                 if not hasattr(server_settings, setting):
                     continue
-                value = line.split(" = ")[-1]
+                value = line.split(" = ")[-1] if " = " in line else line.split(" := ")[-1]
                 server_settings.model_construct()
                 if value in ("true", "false"):
                     value = value == "true"
