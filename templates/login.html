@@ -32,7 +32,8 @@
                         <div class="container position-absolute top-50 start-50 translate-middle-y login-button-container-right"></div>
                     </a>
                 </div>
-                <div class="container position-absolute bottom-0 start-50 translate-middle login-button-container">
+                <div class="container position-absolute bottom-0 start-50 translate-middle login-button-container" aria-disabled="{{disabled_aria}}" {{disabled_inert}}>
+                    <div class="{{disabled_class}}"></div>
                     <a href="{{base}}/guest_dashboard">
                         <button type="button" class="btn position-absolute start-50 top-50 translate-middle login-button">
                             <svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" fill="currentColor" class="bi bi-person" viewBox="0 0 16 16">
