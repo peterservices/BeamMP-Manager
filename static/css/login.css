@@ -25,6 +25,17 @@ div.login-button-container-right {
     height: 100%;
 }
 
+div.disabled {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #808080;
+    opacity: 0.75;
+    z-index: 11;
+}
+
 button.login-button {
     color: #000000;
     clip-path: polygon(10.4% 0%, 100% 0%, 89.6% 100%, 0% 100%);
