@@ -35,6 +35,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
      "discord_oauth2_redirect_url": "",
      "virustotal_scanning": true,
      "preserve_settings_changes": true,
+     "public_dashboard": true,
      "authorized_users": []
 }
 ```
@@ -48,12 +49,15 @@ virustotal_scanning - Whether mod uploads should be checked by VirusTotal before
 
 preserve_settings_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
 
+public_dashboard - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
+
 authorized_users - The Discord user IDs of the people who should be able to login to the web manager.
 
 ### **Features**
 
 * Public Dashboard (No login necessary)
   * View and download mods
+  * Can be turned off if desired
 * Mod Management
   * View and download mods
   * Upload mods
@@ -80,7 +84,6 @@ authorized_users - The Discord user IDs of the people who should be able to logi
 * More methods of authentication (Google)
 * Permission levels
 * Option to not automatically start the server (Maybe a process-detached read-only mode?)
-* Option to disable public dashboard
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
