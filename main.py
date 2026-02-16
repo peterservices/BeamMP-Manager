@@ -71,6 +71,7 @@ class LocalConfiguration(BaseModel):
     discord_oauth2_redirect_url: str = ""
     virustotal_scanning: bool = True
     preserve_settings_changes: bool = True
+    public_dashboard: bool = True
     authorized_users: list[int] = []
 
 class ServerData(BaseModel):
@@ -237,10 +238,14 @@ async def dashboard():
 
 @app.route(f"{configuration.url_base_path}/guest_dashboard")
 async def guest_dashboard():
+    if not configuration.public_dashboard:
+        return abort(404)
     return await render_template("guest_dashboard.html", base=configuration.url_base_path)
 
 @app.route(f"{configuration.url_base_path}/mods_list")
 async def guest_mods():
+    if not configuration.public_dashboard:
+        return abort(404)
     mods = None
     async with aiofiles.open("Resources/Client/mods.json") as file:
         mods: dict[str, dict[str]] | None = json.loads(await file.read())
@@ -258,7 +263,13 @@ async def login():
     error = session.get("error", "")
     if "error" in session:
         session.pop("error")
-    return await render_template("login.html", base=configuration.url_base_path, error=error)
+    return await render_template("login.html",
+                                 base=configuration.url_base_path,
+                                 error=error,
+                                 disabled_class=("" if configuration.public_dashboard else "disabled"),
+                                 disabled_inert=("" if configuration.public_dashboard else "inert"),
+                                 disabled_aria=("false" if configuration.public_dashboard else "true")
+                                 )
 
 @app.route(f"{configuration.url_base_path}/login/uri")
 async def login_uri():
@@ -297,12 +308,16 @@ async def get_static_file(folder: str, filename: str):
     if folder == "css":
         if not authenticated and filename not in ("guest_dashboard.css", "login.css"):
             return abort(401)
+        if not configuration.public_dashboard and filename == "guest_dashboard.css":
+            return abort(404)
         path = safe_join("static/css/", filename)
     elif folder == "images":
         path = safe_join("static/images/", filename)
     elif folder == "js":
         if not authenticated and filename not in ("guest_dashboard.js", "login.js"):
             return abort(401)
+        if not configuration.public_dashboard and filename == "guest_dashboard.js":
+            return abort(404)
         path = safe_join("static/js/", filename)
     else:
         return abort(404)
@@ -312,9 +327,12 @@ async def get_static_file(folder: str, filename: str):
 
 @app.route(f"{configuration.url_base_path}/mods/<string:filename>")
 async def get_mod_file(filename: str):
+    authenticated = await current_user.is_authenticated
+    if not configuration.public_dashboard and not authenticated:
+        return abort(401)
     path = safe_join("Resources/Client/", filename)
     if path is None or (path is not None and not await aioos.path.exists(path)):
-        if not await current_user.is_authenticated:
+        if not authenticated:
             return abort(404)
         path = safe_join("Resources/Client.disabled/", filename)
 
