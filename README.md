@@ -10,15 +10,15 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 ### **Prerequisites**
 
 * Be able to run a standalone [BeamMP Server](https://github.com/BeamMP/BeamMP-Server)
-* Install [uv](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2)
-  * Install a compatible version of python using the terminal (ex: `uv python install 3.13`)
-* Have the client ID or client secret of your [Discord App/Bot](https://discord.com/developers/applications)
+* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications)
+* Install [uv](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2) OR a standalone compatible Python version
+  * [uv] Install a compatible version of Python using the terminal (ex: `uv python install 3.13`)
 * [Optional] Have a [VirusTotal](https://www.virustotal.com) API key
 
 ### **Quickstart Guide**
 
 * Clone or [download the source](https://github.com/peterservices/BeamMP-Manager/archive/refs/heads/main.zip) and place the uncompressed folder in a convenient location
-  * Install dependencies using uv in the terminal (ex: `uv sync`)
+  * Install dependencies (With uv: Use uv in the terminal. ex: `uv sync`)
 * Download or compile a [BeamMP Server](https://github.com/BeamMP/BeamMP-Server) executable, and put it in the same directory as BeamMP-Manager
 * Copy the contents of `.env.example` and create a file named `.env`
   * Add your Discord App's client ID and client secret, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
@@ -80,7 +80,7 @@ authorized_users - The Discord user IDs of the people who should be able to logi
 * More methods of authentication (Google)
 * Permission levels
 * Option to not automatically start the server (Maybe a process-detached read-only mode?)
-* Otion to disable public dashboard
+* Option to disable public dashboard
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
