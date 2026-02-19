@@ -71,7 +71,25 @@ class LocalConfiguration(BaseModel):
     discord_oauth2_redirect_url: str = ""
     virustotal_scanning: bool = True
     preserve_settings_changes: bool = True
+    detect_mod_maps: bool = True
     public_dashboard: bool = True
+    levels: list[str] = [
+        "/levels/automation_test_track/info.json",
+        "/levels/cliff/info.json",
+        "/levels/derby/info.json",
+        "/levels/driver_training/info.json",
+        "/levels/east_coast_usa/info.json",
+        "/levels/gridmap_v2/info.json",
+        "/levels/hirochi_raceway/info.json",
+        "/levels/industrial/info.json",
+        "/levels/italy/info.json",
+        "/levels/johnson_valley/info.json",
+        "/levels/jungle_rock_island/info.json",
+        "/levels/small_island/info.json",
+        "/levels/smallgrid/info.json",
+        "/levels/utah/info.json",
+        "/levels/west_coast_usa/info.json",
+    ]
     authorized_users: list[int] = []
 
 class ServerData(BaseModel):
@@ -224,6 +242,14 @@ async def start_server() -> None:
     reset_server_data()
     await send_changed_data(old_data)
     server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+
+async def write_config() -> None:
+    """
+    Writes the configuration to disk asynchronously.
+    """
+    to_write = configuration.model_dump_json(indent=5)
+    async with aiofiles.open("config.json", "w") as file:
+        await file.write(to_write)
 
 # -- Website routes --
 
@@ -397,15 +423,31 @@ async def get_mod_file(filename: str):
 # -- Mod Upload --
 
 def check_zip_sync(path) -> bool:
+    """
+    Checks whether a zip file is valid.
+    """
     valid = True
     try:
-        with zipfile.ZipFile(path, "r") as zip:
+        with zipfile.ZipFile(path) as zip:
             check = zip.testzip()
         if check is not None:
             valid = False
     except zipfile.BadZipFile:
         valid = False
     return valid
+
+def detect_zip_levels(path) -> str | None:
+    """
+    Searches for level information files, and returns the path if found.
+    """
+    filename = None
+    with zipfile.ZipFile(path) as zip:
+        filelist = zip.filelist
+    for file in filelist:
+        # Search for map info files (levelname/info.json is the more modern format, and levelname/levelname.mis is old but still used)
+        if file.filename.startswith("levels/") and (file.filename.endswith("/info.json") or file.filename.endswith(".mis")):
+            filename = "/" + file.filename # Add a '/' to the beginning to match the correct format
+    return filename
 
 @app.route(f"{configuration.url_base_path}/upload", methods=["POST"])
 @login_required
@@ -540,6 +582,13 @@ async def upload():
                         del temp_files[filename]
                         raise error
 
+        # Add the level path to the configuration, if enabled
+        if configuration.detect_mod_maps:
+            level = await asyncio.to_thread(detect_zip_levels, temp_path)
+            if level is not None and level not in configuration.levels:
+                configuration.levels.append(level)
+                await write_config() # Write the new level to the disk
+
         final_path = safe_join("Resources/Client/", filename)
         shutil.move(temp_path, final_path)
         del temp_files[filename]
@@ -603,6 +652,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                             mod["enabled"] = False
                         mods.update(mods_disabled)
                     return {"mod_list": mods}
+                case "levels":
+                    return {"levels": configuration.levels}
         case "command":
             if "command" not in ws_request:
                 return None
