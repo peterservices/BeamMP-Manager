@@ -160,6 +160,8 @@ function showReloadModal() {
 }
 
 function showSettingModal() {
+    connection.send(JSON.stringify({"type": "request", "request": "levels"})); // Request an updated list of levels for the level dropdown
+
     // Delete previous form inputs
     let settingLength = settingForm.children.length;
     for (let i = 0; i < settingLength; i++) {
@@ -220,26 +222,108 @@ function showSettingModal() {
                 settingForm.appendChild(num_input);
                 break;
             case "string":
-                let str_label = document.createElement("label");
-                str_label.for = key;
-                str_label.className = "form-label";
-                str_label.innerHTML = key;
+                if (key == "Map") { // Create a dropdown/text input combination to select maps
+                    let map_label = document.createElement("label");
+                    map_label.id = key + "label";
+                    map_label.for = key;
+                    map_label.className = "form-label";
+                    map_label.innerHTML = key;
 
-                let str_input = document.createElement("input");
-                str_input.type = "text";
-                str_input.id = key;
-                str_input.className = "form-control";
-                str_input.style = "margin-bottom: 10px;";
-                str_input.value = value;
-                str_input.changed = false;
+                    let map_div = document.createElement("div");
+                    map_div.className = "input-group";
+                    map_div.style = "margin-bottom: 10px;";
 
-                str_input.onchange = () => {
-                    str_input.changed = str_input.value != value;
-                    str_label.style = ((str_input.changed) ? "font-style: italic;" : "");
+                    let map_button1 = document.createElement("button");
+                    map_button1.className = "btn btn-outline-secondary dropdown-toggle";
+                    map_button1.type = "button";
+                    map_button1.setAttribute("data-bs-toggle", "dropdown");
+                    map_button1.ariaExpanded = "false";
+                    map_button1.innerHTML = "Input Mode";
+                    let map_button2 = document.createElement("button");
+                    map_button2.id = key + "button2";
+                    map_button2.className = "btn btn-outline-secondary dropdown-toggle";
+                    map_button2.type = "button";
+                    map_button2.setAttribute("data-bs-toggle", "dropdown");
+                    map_button2.ariaExpanded = "false";
+                    map_button2.innerHTML = value;
+
+                    let map_input = document.createElement("input");
+                    map_input.type = "text";
+                    map_input.id = key;
+                    map_input.name = "level";
+                    map_input.className = "form-control";
+                    map_input.value = value;
+                    map_input.changed = false;
+                    map_input.hidden = true;
+
+                    map_input.onchange = () => {
+                        map_input.changed = map_input.value != value;
+                        map_button2.innerHTML = map_input.value;
+                        map_label.style = ((map_input.changed) ? "font-style: italic;" : "");
+                    }
+
+                    let map_dropdown1 = document.createElement("ul");
+                    map_dropdown1.className = "dropdown-menu";
+                    let map_dropdown2 = document.createElement("ul");
+                    map_dropdown2.className = "dropdown-menu";
+                    map_dropdown2.id = key + "dropdown";
+
+                    let map_dropdown_button = document.createElement("a");
+                    map_dropdown_button.className = "dropdown-item";
+                    map_dropdown_button.href = "#";
+                    map_dropdown_button.innerHTML = "Autofill";
+                    let map_dropdown_mode = document.createElement("li");
+                    map_dropdown_mode.appendChild(map_dropdown_button);
+                    map_dropdown_button.onclick = () => {
+                        map_input.hidden = true;
+                        map_button2.hidden = false;
+                    }
+                    let map_manual_button = document.createElement("a");
+                    map_manual_button.className = "dropdown-item";
+                    map_manual_button.href = "#";
+                    map_manual_button.innerHTML = "Manual";
+                    let map_manual_mode = document.createElement("li");
+                    map_manual_mode.appendChild(map_manual_button);
+                    map_manual_button.onclick = () => {
+                        map_input.hidden = false;
+                        map_button2.hidden = true;
+                    }
+
+                    map_dropdown1.appendChild(map_dropdown_mode);
+                    map_dropdown1.appendChild(map_manual_mode);
+
+                    // Add the maps to the dropdown
+                    refreshMapDropdown(map_input, map_label, map_button2, map_dropdown2);
+
+                    map_div.appendChild(map_button1);
+                    map_div.appendChild(map_dropdown1);
+                    map_div.appendChild(map_input);
+                    map_div.appendChild(map_button2);
+                    map_div.appendChild(map_dropdown2);
+                    settingForm.appendChild(map_label);
+                    settingForm.appendChild(map_div);
+                } else {
+                    let str_label = document.createElement("label");
+                    str_label.for = key;
+                    str_label.className = "form-label";
+                    str_label.innerHTML = key;
+
+                    let str_input = document.createElement("input");
+                    str_input.type = "text";
+                    str_input.id = key;
+                    str_input.className = "form-control";
+                    str_input.style = "margin-bottom: 10px;";
+                    str_input.value = value;
+                    str_input.changed = false;
+
+                    str_input.onchange = () => {
+                        str_input.changed = str_input.value != value;
+                        str_label.style = ((str_input.changed) ? "font-style: italic;" : "");
+                    }
+
+                    settingForm.appendChild(str_label);
+                    settingForm.appendChild(str_input);
                 }
-
-                settingForm.appendChild(str_label);
-                settingForm.appendChild(str_input);
                 break;
         }
     }
@@ -532,6 +616,35 @@ function refreshChatLogs(logs) {
     }
 }
 
+function refreshMapDropdown(map_input, map_label, map_button2, map_dropdown2) {
+    // Remove old maps
+    let levelsLength = map_dropdown2.children.length;
+    for (let i = 0; i < levelsLength; i++) {
+        map_dropdown2.children[0].remove();
+    }
+
+    // Add maps
+    let value = server_settings["Map"];
+    let levels = ((server_data.levels != null)? server_data.levels : [value])
+    let levelLength = levels.length;
+    for (let i = 0; i < levelLength; i++) {
+        let map_path_button = document.createElement("a");
+        map_path_button.className = "dropdown-item";
+        map_path_button.href = "#";
+        map_path_button.innerHTML = levels[i];
+        let map_path = document.createElement("li");
+        map_path.appendChild(map_path_button);
+        map_path_button.onclick = () => {
+            map_input.value = levels[i];
+            map_button2.innerHTML = levels[i];
+
+            map_input.changed = map_input.value != value;
+            map_label.style = ((map_input.changed) ? "font-style: italic;" : "");
+        }
+        map_dropdown2.appendChild(map_path);
+    }
+}
+
 // Process server messages
 connection.addEventListener("message", (event) => {
     let data = JSON.parse(event.data);
@@ -574,6 +687,15 @@ connection.addEventListener("message", (event) => {
                         if (key == "mods") {
                             // Reload mod list on mod count change
                             connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
+                        } else if (key == "levels") {
+                            // Update the Map dropdown, if it exists, upon receiving the levels list
+                            let input = document.getElementById("Map");
+                            let label = document.getElementById("Maplabel");
+                            let button2 = document.getElementById("Mapbutton2");
+                            let dropdown = document.getElementById("Mapdropdown");
+                            if (input != null && label != null && button2 != null && dropdown != null) {
+                                refreshMapDropdown(input, label, button2, dropdown);
+                            }
                         } else if (key == "players") {
                             // Reload player list on player list change
                             refreshPlayers(server_data["players"]);
@@ -645,7 +767,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function 
             const chunk = file.slice(start, end);
 
             if (end == file.size) {
-                showToast("info", "File upload almost complete. Be aware this can take up to a few minutes.");
+                showToast("info", "File upload almost complete. Be aware this can take a few minutes.");
             }
 
             let formData = new FormData();
@@ -787,8 +909,15 @@ document.getElementById("settingModalButton").addEventListener("click", (event) 
             connection.send(JSON.stringify({"type": "set", "setting": child.id, "value": value}));
         } else if (child.tagName == "DIV") {
             let checkbox = child.children.namedItem("switch");
-            if (checkbox && checkbox.changed) {
-                connection.send(JSON.stringify({"type": "set", "setting": checkbox.id, "value": checkbox.checked}));
+            let level = child.children.namedItem("level");
+            if (checkbox != null) {
+                if (checkbox.changed) {
+                    connection.send(JSON.stringify({"type": "set", "setting": checkbox.id, "value": checkbox.checked}));
+                }
+            } else if (level != null) {
+                if (level.changed) {
+                    connection.send(JSON.stringify({"type": "set", "setting": level.id, "value": level.value}));
+                }
             }
         }
     }
