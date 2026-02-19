@@ -72,12 +72,15 @@ authorized_users - A list of Discord user IDs of the users who should be able to
 * Player Management
   * View online players
   * Kick players
+* Manage server settings
+  * View and change server settings
+  * Automatically detect maps in mods you upload
+  * Autofilled options to change the map setting to
 * Logging
   * Log player joins and leaves
   * Log when players finish downloading mods from the server
   * Log chat messages
 * And More
-  * View and change server settings
   * Restart server
   * Manually reload mods
   * Send chat messages as the server
@@ -85,7 +88,6 @@ authorized_users - A list of Discord user IDs of the users who should be able to
 
 ### **Planned Features**
 
-* Map setting dropdown
 * Historical logs that save over restarts
 * More methods of authentication (Google)
 * Permission levels
