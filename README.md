@@ -35,9 +35,10 @@ A configurable web-based manager for your BeamMP server using Discord as authent
      "discord_oauth2_redirect_url": "",
      "virustotal_scanning": true,
      "preserve_settings_changes": true,
+     "persist_data": true,
+     "maximum_log_entries": 500,
      "detect_mod_maps": true,
      "public_dashboard": true,
-     "levels": [...],
      "authorized_users": []
 }
 ```
@@ -51,11 +52,13 @@ virustotal_scanning - Whether mod uploads should be checked by VirusTotal before
 
 preserve_settings_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
 
-detect_mod_maps - If enabled, when mods are uploaded they will be scanned for modded levels. If found, the level will automatically be added to `levels` and available in the settings dropdown.
+persist_data - Whether data such as logs and level filepaths should save over restarts.
+
+maximum_log_entries - The maximum number of total log entries that will be stored. This is useful to limit the file size of the persistent data file.
+
+detect_mod_maps - Whether uploaded mods are scanned for modded levels. If found, the level filepath will automatically be saved (if persist_data is enabled) and available in the settings dropdown.
 
 public_dashboard - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
-
-levels - A list of filepaths to maps that will be available in the settings dropdown. This field is auto-populated with the default BeamNG maps.
 
 authorized_users - A list of Discord user IDs of the users who should be able to login to the web manager.
 
@@ -80,6 +83,7 @@ authorized_users - A list of Discord user IDs of the users who should be able to
   * Log player joins and leaves
   * Log when players finish downloading mods from the server
   * Log chat messages
+  * Logs save across server restarts
 * And More
   * Restart server
   * Manually reload mods
@@ -88,7 +92,7 @@ authorized_users - A list of Discord user IDs of the users who should be able to
 
 ### **Planned Features**
 
-* Historical logs that save over restarts
+* Enchanced event logging (Server start/stop, dashboard logins, etc.)
 * More methods of authentication (Google)
 * Permission levels
 * Option to not automatically start the server (Maybe a process-detached read-only mode?)
