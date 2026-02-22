@@ -583,21 +583,23 @@ function refreshPlayerLogs(logs) {
 
     // Add logs
     for (let i = logs.length - 1; i >= 0; i--) {
-        let content = logs[i]["player"]
-        switch(logs[i]["type"]) {
-            case "join":
-                content += " joined.";
-                break;
-            case "sync":
-                content += " synced mods.";
-                break;
-            case "leave":
-                content += " left.";
-                break;
+        if (["join", "sync", "leave"].includes(logs[i]["type"])) {
+            let content = logs[i]["player"]
+            switch(logs[i]["type"]) {
+                case "join":
+                    content += " joined.";
+                    break;
+                case "sync":
+                    content += " synced mods.";
+                    break;
+                case "leave":
+                    content += " left.";
+                    break;
+            }
+            let log = createLogDiv(content, timestamp=logs[i]["timestamp"]);
+            log.style = "margin-top: 2%;";
+            playerLogs.appendChild(log);
         }
-        let log = createLogDiv(content, timestamp=logs[i]["timestamp"]);
-        log.style = "margin-top: 2%;";
-        playerLogs.appendChild(log);
     }
 }
 
@@ -610,9 +612,11 @@ function refreshChatLogs(logs) {
 
     // Add logs
     for (let i = logs.length - 1; i >= 0; i--) {
-        let log = createLogDiv(logs[i]["sender"] + ((logs[i]["receiver"] != "everyone") ? " (to " + logs[i]["receiver"] + ")" : "") + ": " + logs[i]["message"], timestamp=logs[i]["timestamp"]);
-        log.style = "margin-top: 2%;";
-        chatLogs.appendChild(log);
+        if (["message"].includes(logs[i]["type"])) {
+            let log = createLogDiv(logs[i]["sender"] + ((logs[i]["receiver"] != "everyone") ? " (to " + logs[i]["receiver"] + ")" : "") + ": " + logs[i]["message"], timestamp=logs[i]["timestamp"]);
+            log.style = "margin-top: 2%;";
+            chatLogs.appendChild(log);
+        }
     }
 }
 
@@ -699,12 +703,10 @@ connection.addEventListener("message", (event) => {
                         } else if (key == "players") {
                             // Reload player list on player list change
                             refreshPlayers(server_data["players"]);
-                        } else if (key == "player_logs") {
+                        } else if (key == "logs") {
                             // Reload player logs on join logs change
-                            refreshPlayerLogs(server_data["player_logs"]);
-                        } else if (key == "chat_logs") {
-                            // Reload chat logs on chat logs change
-                            refreshChatLogs(server_data["chat_logs"]);
+                            refreshPlayerLogs(server_data["logs"]);
+                            refreshChatLogs(server_data["logs"]);
                         } else if (key == "connected") {
                             // Update server connection text
                             if ("error" in server_data && server_data["error"]) {
@@ -967,6 +969,6 @@ logsButton.addEventListener("click", () => {
     logsPage.ariaHidden = false;
     logsButton.children[0].classList.add("page-selected");
 
-    refreshPlayerLogs(server_data["player_logs"]);
-    refreshChatLogs(server_data["chat_logs"]);
+    refreshPlayerLogs(server_data["logs"]);
+    refreshChatLogs(server_data["logs"]);
 });
