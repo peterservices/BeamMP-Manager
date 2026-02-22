@@ -1,6 +1,7 @@
 __pycache__
 .env
 config.json
+persistent_data.json
 Resources
 Server*.log
 ServerConfig.toml
