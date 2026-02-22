@@ -8,11 +8,10 @@ import os
 import re
 import shutil
 import signal
-import typing
 import zipfile
 from collections.abc import AsyncGenerator
 from secrets import token_urlsafe
-from typing import Any
+from typing import Annotated, Any, Literal, Self
 
 import aiofiles
 import aiofiles.os as aioos
@@ -20,7 +19,14 @@ import discordoauth2
 import tomlkit
 import vt
 from dotenv import find_dotenv, load_dotenv, set_key
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    PositiveInt,
+    computed_field,
+)
 from quart import (
     Quart,
     Response,
@@ -50,7 +56,7 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 if CLIENT_ID is None or CLIENT_SECRET is None:
-    raise KeyError("Both the CLIENT_ID and CLIENT_SECRET envirnoment variables are required for Discord login.")
+    raise KeyError("Both the CLIENT_ID and CLIENT_SECRET environment variables are required for Discord login.")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if SECRET_KEY is None:
@@ -70,32 +76,86 @@ class LocalConfiguration(BaseModel):
     url_base_path: str = "/beammp"
     discord_oauth2_redirect_url: str = ""
     virustotal_scanning: bool = True
-    preserve_settings_changes: bool = True
+    preserve_setting_changes: bool = True
+    persist_data: bool = True
+    maximum_log_entries: PositiveInt = 500
     detect_mod_maps: bool = True
     public_dashboard: bool = True
-    levels: list[str] = [
-        "/levels/automation_test_track/info.json",
-        "/levels/cliff/info.json",
-        "/levels/derby/info.json",
-        "/levels/driver_training/info.json",
-        "/levels/east_coast_usa/info.json",
-        "/levels/gridmap_v2/info.json",
-        "/levels/hirochi_raceway/info.json",
-        "/levels/industrial/info.json",
-        "/levels/italy/info.json",
-        "/levels/johnson_valley/info.json",
-        "/levels/jungle_rock_island/info.json",
-        "/levels/small_island/info.json",
-        "/levels/smallgrid/info.json",
-        "/levels/utah/info.json",
-        "/levels/west_coast_usa/info.json",
-    ]
     authorized_users: list[int] = []
+
+class PersistentData(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    async def dump_and_write(self: Self, filename: str = "persistent_data.json") -> None:
+        """
+        Dump the model and write the JSON to disk asynchronously.
+        """
+        async with self.lock:
+            to_write = self.model_dump_json(indent=5)
+            async with aiofiles.open(filename, "w") as file:
+                await file.write(to_write)
+
+    async def trim_logs(self: Self) -> bool:
+        """
+        Ensure the length of the logs don't exceed the configured limit. Returns whether any changes were made.
+        """
+        changes = False
+        logs_length = len(self.logs)
+        if logs_length > configuration.maximum_log_entries:
+            end_index = logs_length - configuration.maximum_log_entries
+            async with self.lock:
+                del self.logs[0:end_index]
+        return changes
+
+    async def verify_levels(self: Self) -> bool:
+        """
+        Ensure all level filepaths are associated to a mod file, and remove them if not. Returns whether any changes were made.
+        """
+        changes = False
+        async with aiofiles.open("Resources/Client/mods.json") as file:
+            mods_json = await file.read()
+        mods: dict[str, dict[str]] | None = json.loads(mods_json)
+        if mods is not None:
+            hashes = set()
+            for _, v in mods.items():
+                hashes.add(v["hash"])
+
+            async with self.lock:
+                for key, value in self.levels.copy().items():
+                    if value is not None:
+                        for mod_hash in value.copy():
+                            if mod_hash not in hashes:
+                                value.pop(value.index(mod_hash))
+                        if len(value) == 0:
+                            del self.levels[key]
+                            changes = True
+        return changes
+
+    lock: asyncio.Lock = Field(exclude=True)
+    levels: dict[str, list[str] | None] = {
+        "/levels/automation_test_track/info.json": None,
+        "/levels/cliff/info.json": None,
+        "/levels/derby/info.json": None,
+        "/levels/driver_training/info.json": None,
+        "/levels/east_coast_usa/info.json": None,
+        "/levels/gridmap_v2/info.json": None,
+        "/levels/hirochi_raceway/info.json": None,
+        "/levels/industrial/info.json": None,
+        "/levels/italy/info.json": None,
+        "/levels/johnson_valley/info.json": None,
+        "/levels/jungle_rock_island/info.json": None,
+        "/levels/small_island/info.json": None,
+        "/levels/smallgrid/info.json": None,
+        "/levels/utah/info.json": None,
+        "/levels/west_coast_usa/info.json": None,
+    }
+    logs: list[dict[str, str]] = []
 
 class ServerData(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    process: asyncio.subprocess.Process | None = Field(None, exclude=True)
+    persistent_data: PersistentData | None = Field(default=None, exclude=True)
+    process: asyncio.subprocess.Process | None = Field(default=None, exclude=True)
     connected: bool = False
     error: bool = False
     version: str | None = None
@@ -104,8 +164,20 @@ class ServerData(BaseModel):
     max_clients: int | None = None
     mods: int = 0
     players: dict[str, str] = {}
-    player_logs: list[dict[str, str]] = []
-    chat_logs: list[dict[str, str | list]] = []
+
+    @computed_field
+    @property
+    def levels(self: Self) -> dict[str, list[str] | None] | None:
+        if self.persistent_data is None:
+            return None
+        return self.persistent_data.levels
+
+    @computed_field
+    @property
+    def logs(self: Self) -> list[dict[str, str]] | None:
+        if self.persistent_data is None:
+            return None
+        return self.persistent_data.logs
 
 class ServerSettings(BaseModel):
     InformationPacket: bool | None = None
@@ -124,30 +196,34 @@ class ServerSettings(BaseModel):
     ResourceFolder: str | None = None
 
 class TempFile(BaseModel):
-    def _validate_hash_obj(obj: object): # Check if the object has the attributes of a HASH object, because there is no HASH type to compare against
+    def _validate_hash_obj(obj: object) -> object:
+        """
+        Validate that the object is a HASH object.
+        """
+        # Check if the object has the attributes of a HASH object, because there is no HASH type to compare against
         if hasattr(obj, "update") and hasattr(obj, "digest") and hasattr(obj, "hexdigest") and hasattr(obj, "copy"):
             return obj
         raise ValueError("Must be a HASH object!")
 
     total_bytes: int
     user: str
-    hasher: typing.Annotated[object, AfterValidator(_validate_hash_obj)] = hashlib.sha256()
+    hasher: Annotated[object, AfterValidator(_validate_hash_obj)] = hashlib.sha256()
     complete: bool = False
     last_write: datetime.datetime | None = None
 
 class Broker:
-    def __init__(self) -> None:
+    def __init__(self: Self) -> None:
         self.connections: set[asyncio.Queue] = set()
 
-    async def event(self, data: dict[str, Any] | None) -> None:
+    async def event(self: Self, data: dict[str, Any] | None) -> None:
         if data is not None: # If data is None, it is a shutdown request and shouldn't be serialized
             data = json.dumps(data)
 
         # Send event data
-        for connection in self.connections:
+        for connection in self.connections.copy():
             await connection.put(data)
 
-    async def subscribe(self) -> AsyncGenerator[str, None]:
+    async def subscribe(self: Self) -> AsyncGenerator[str, None]:
         connection = asyncio.Queue()
         self.connections.add(connection)
         try:
@@ -169,14 +245,35 @@ else:
         configuration.beammp_executable_path = os.path.abspath(configuration.beammp_executable_path)
 
     # Save any new changes to disk
-    if configuration.model_dump_json() != config_str:
-        to_write = configuration.model_dump_json(indent=5)
+    json_data = configuration.model_dump_json(indent=5)
+    if json_data != config_str:
+        to_write = json_data
         with open("config.json", "w") as file:
             file.write(to_write)
 
+persistent_data = PersistentData(lock=asyncio.Lock())
+if configuration.persist_data:
+    if not os.path.exists("persistent_data.json"):
+        to_write = configuration.model_dump_json(indent=5)
+        with open("persistent_data.json", "x") as file:
+            file.write(to_write)
+    else:
+        with open("persistent_data.json") as file:
+            persistent_str = file.read()
+        persistent_dict = json.loads(persistent_str)
+        persistent_dict["lock"] = asyncio.Lock()
+        persistent_data = PersistentData.model_validate(persistent_dict)
+
+        # Save any new changes to disk
+        json_data = persistent_data.model_dump_json(indent=5)
+        if json_data != persistent_str:
+            to_write = json_data
+            with open("persistent_data.json", "w") as file:
+                file.write(to_write)
+
 oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect=configuration.discord_oauth2_redirect_url, bot_token="")
 
-server_data = ServerData(process=None, connected=False, error=False, version=None, lua_version=None, port=None, max_clients=None, mods=0, players={}, player_logs=[], chat_logs=[])
+server_data = ServerData(persistent_data=persistent_data)
 server_settings = ServerSettings()
 broker = Broker()
 websockets: list[asyncio.Task] = []
@@ -184,7 +281,7 @@ temp_files: dict[str, TempFile] = {}
 
 async def run_command(command_str: str) -> None:
     """
-    Sends a command to the BeamMP server.
+    Send a command to the BeamMP server.
     """
     if server_data.process is None:
         return
@@ -192,6 +289,20 @@ async def run_command(command_str: str) -> None:
     command = command_str.encode()
     server_data.process.stdin.write(command)
     await server_data.process.stdin.drain()
+
+async def verify_persistent_fields() -> None:
+    """
+    Verify all the fields in persistent_data, and update the disk (if enabled) and websocket if changes were made.
+    """
+    # Save old data to compare with after verifying levels
+    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+    old_data = ServerData.model_validate_json(old_data_json)
+    old_data.persistent_data = server_data.persistent_data
+    levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
+    if levels or await server_data.persistent_data.trim_logs():
+        if configuration.persist_data:
+            await server_data.persistent_data.dump_and_write()
+        await send_changed_data(old_data)
 
 async def send_changed_data(old_data: ServerData, old_settings: ServerSettings | None = None) -> None:
     changes = {}
@@ -216,36 +327,40 @@ async def send_changed_data(old_data: ServerData, old_settings: ServerSettings |
         changes["type"] = "settings"
         await broker.event(changes)
 
-def reset_server_data() -> None :
+def reset_server_data() -> None:
     """
-    Resets server_data to its default state.
+    Reset server_data to its default state.
     """
     global server_data
-    server_data = ServerData()
+    server_data = ServerData(persistent_data=persistent_data)
 
 def reset_server_settings() -> None:
     """
-    Clears all settings from server_settings.
+    Clear all settings from server_settings.
     """
     global server_settings
     server_settings = ServerSettings()
 
 async def start_server() -> None:
     """
-    Starts the BeamMP Server.
+    Start the BeamMP Server.
     """
-    old_data_dict = server_data.model_dump(exclude={"process"})
+    old_data_dict = server_data.model_dump()
     old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
+    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
     async with aiofiles.open("Server.log", "w") as file:
         await file.writelines("")
+    if configuration.persist_data:
+        await verify_persistent_fields()
     reset_server_settings()
     reset_server_data()
     await send_changed_data(old_data)
-    server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+    if os.path.exists(configuration.beammp_executable_path):
+        server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
 
 async def write_config() -> None:
     """
-    Writes the configuration to disk asynchronously.
+    Write the configuration to disk asynchronously.
     """
     to_write = configuration.model_dump_json(indent=5)
     async with aiofiles.open("config.json", "w") as file:
@@ -424,7 +539,7 @@ async def get_mod_file(filename: str):
 
 def check_zip_sync(path) -> bool:
     """
-    Checks whether a zip file is valid.
+    Check whether a zip file is valid.
     """
     valid = True
     try:
@@ -438,7 +553,7 @@ def check_zip_sync(path) -> bool:
 
 def detect_zip_levels(path) -> str | None:
     """
-    Searches for level information files, and returns the path if found.
+    Search for level information files, and returns the path if found.
     """
     filename = None
     with zipfile.ZipFile(path) as zip:
@@ -528,7 +643,7 @@ async def upload():
                 return abort(415)
 
     if end + 1 == total:
-        hash = temp_files[filename].hasher.hexdigest()
+        mod_hash = temp_files[filename].hasher.hexdigest()
         temp_files[filename].complete = True
         # Check if the zip file is valid
         valid = await asyncio.to_thread(check_zip_sync, temp_path)
@@ -542,7 +657,7 @@ async def upload():
                 raise KeyError("The VT_KEY environment variable is required for VirusTotal scanning.")
             async with vt.Client(VT_KEY) as client: # Regular 'with vt.Client()' doesn't work for some reason so we use 'async with vt.Client()'
                 try:
-                    vt_file = await client.get_object_async(f"/files/{hash}")
+                    vt_file = await client.get_object_async(f"/files/{mod_hash}")
                     if vt_file.error is not None:
                         raise vt.error.APIError("NotFoundError", "Analysis stats not found.") # Manually raise a NotFoundError to trigger a scan if there is an error
                     analysis_stats = vt_file.last_analysis_stats
@@ -559,7 +674,7 @@ async def upload():
                         with open(temp_path, "rb") as file:
                             try:
                                 await client.scan_file_async(file, wait_for_completion=True)
-                                vt_file = await client.get_object_async(f"/files/{hash}")
+                                vt_file = await client.get_object_async(f"/files/{mod_hash}")
                             except vt.error.APIError as error:
                                 await aioos.remove(temp_path)
                                 del temp_files[filename]
@@ -585,9 +700,13 @@ async def upload():
         # Add the level path to the configuration, if enabled
         if configuration.detect_mod_maps:
             level = await asyncio.to_thread(detect_zip_levels, temp_path)
-            if level is not None and level not in configuration.levels:
-                configuration.levels.append(level)
-                await write_config() # Write the new level to the disk
+            if level is not None:
+                async with server_data.persistent_data.lock:
+                    if level in server_data.levels:
+                        server_data.levels[level].append(mod_hash)
+                    else:
+                        server_data.levels[level] = [mod_hash]
+                await verify_persistent_fields() # Write the changes to disk and update over the websocket
 
         final_path = safe_join("Resources/Client/", filename)
         shutil.move(temp_path, final_path)
@@ -599,7 +718,7 @@ async def upload():
 
 # -- Data Websocket --
 
-async def process_websocket_request(ws_request: str) -> dict[str] | typing.Literal[True] | None:
+async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True] | None:
     ws_request = json.loads(ws_request)
     if "type" not in ws_request:
         return None
@@ -626,10 +745,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                     return {"mods": server_data.mods}
                 case "players":
                     return {"players": server_data.players}
-                case "player_logs":
-                    return {"player_logs": server_data.player_logs}
-                case "chat_logs":
-                    return {"chat_logs": server_data.chat_logs}
+                case "logs":
+                    return {"logs": server_data.logs}
                 case "mod_list":
                     mods = None
                     async with aiofiles.open("Resources/Client/mods.json") as file:
@@ -653,7 +770,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                         mods.update(mods_disabled)
                     return {"mod_list": mods}
                 case "levels":
-                    return {"levels": configuration.levels}
+                    return {"levels": list(server_data.levels.keys())}
         case "command":
             if "command" not in ws_request:
                 return None
@@ -714,9 +831,21 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 del mods_disabled[ws_request["enable"]]
                 if len(mods_disabled) == 0:
                     mods_disabled = None
-            to_write = json.dumps(mods_disabled)
-            async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
-                await file.write(to_write)
+                to_write = json.dumps(mods_disabled)
+                async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
+                    await file.write(to_write)
+
+                # Add the level path to the configuration, if enabled
+                if configuration.detect_mod_maps:
+                    level = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
+                    if level is not None:
+                        async with server_data.persistent_data.lock:
+                            if level in server_data.levels:
+                                server_data.levels[level].append(mods[ws_request["enable"]]["hash"])
+                            else:
+                                server_data.levels[level] = [mods[ws_request["enable"]]["hash"]]
+                        if configuration.detect_mod_maps:
+                            await verify_persistent_fields() # Write the changes to disk and update over the websocket
 
             # Reload mods to update mods list
             await run_command("reloadmods")
@@ -747,6 +876,9 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
 
             # Reload mods to update mods list
             await run_command("reloadmods")
+            # Remove the mod hash from any level filepaths, if applicable
+            if configuration.detect_mod_maps:
+                await verify_persistent_fields()
 
             return {"success": True, "action": "disable"}
         case "delete":
@@ -758,7 +890,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                 path = safe_join("Resources/Client.disabled/", ws_request["delete"])
                 disabled = True
             if path is None or not await aioos.path.exists(path):
-                return {"action": "enable", "success": False}
+                return {"action": "delete", "success": False}
             await aioos.remove(path)
 
             # Remove deleted mod information from disabled json file, if applicable
@@ -774,6 +906,9 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
             else:
                 # Reload mods to update mods list if deleted mod was enabled
                 await run_command("reloadmods")
+                # Remove the mod hash from any level filepaths, if applicable
+                if configuration.detect_mod_maps:
+                    await verify_persistent_fields()
 
             return {"success": True, "action": "delete"}
         case "get":
@@ -794,7 +929,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
                     await run_command(f"settings set General {ws_request["setting"]} {json.dumps(ws_request["value"])}")
 
                     # Save the setting change to disk so it is preserved after restart
-                    if configuration.preserve_settings_changes and os.path.exists("ServerConfig.toml"):
+                    if configuration.preserve_setting_changes and os.path.exists("ServerConfig.toml"):
                         async with aiofiles.open("ServerConfig.toml") as file:
                             toml_str = await file.read()
                         toml = tomlkit.parse(toml_str)
@@ -811,7 +946,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | typing.Liter
 
 async def receive() -> None:
     """
-    Receives and processes data from a websocket.
+    Receive and process data from a websocket.
     """
     while True:
         ws_request = await websocket.receive()
@@ -861,117 +996,118 @@ async def check_lines(old: list[str], output: list[str]) -> list[str]:
     return new_lines
 
 async def process_new_lines(new_lines: list[str]) -> None:
-    for line in new_lines:
-        data = line.split(" ")
-        if len(data) >= 3 and data[2][0] == "[" and data[2][-1] == "]":
-            if data[2] == "[INFO]":
-                if "ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY" in line:
-                    server_data.connected = True
-                elif "BeamMP Server v" in line:
-                    server_data.version = line.split(" ")[-1]
-                elif "Lua v" in line:
-                    server_data.lua_version = line.split()[-1]
-                elif "Vehicle data network online on port " in line:
-                    for i, word in enumerate(data):
-                        if len(data) > i + 1 and data[i + 1].lower() == "clients":
-                            try:
-                                int(word)
-                            except ValueError:
-                                continue
-                            else:
-                                server_data.max_clients = int(word)
-                        elif data[i - 1].lower() == "port":
-                            server_data.port = int(word)
+    async with server_data.persistent_data.lock:
+        for line in new_lines:
+            data = line.split(" ")
+            if len(data) >= 3 and data[2][0] == "[" and data[2][-1] == "]":
+                if data[2] == "[INFO]":
+                    if "ALL SYSTEMS STARTED SUCCESSFULLY, EVERYTHING IS OKAY" in line:
+                        server_data.connected = True
+                    elif "BeamMP Server v" in line:
+                        server_data.version = line.split(" ")[-1]
+                    elif "Lua v" in line:
+                        server_data.lua_version = line.split()[-1]
+                    elif "Vehicle data network online on port " in line:
+                        for i, word in enumerate(data):
+                            if len(data) > i + 1 and data[i + 1].lower() == "clients":
+                                try:
+                                    int(word)
+                                except ValueError:
+                                    continue
+                                else:
+                                    server_data.max_clients = int(word)
+                            elif data[i - 1].lower() == "port":
+                                server_data.port = int(word)
 
-                    # Get loaded settings
-                    if server_data.process is not None:
-                        await run_command("settings list")
-                elif "Loaded " in line and " Mods" in line:
-                    mods = data[-2]
-                    try:
-                        int(mods)
-                    except ValueError:
-                        continue
-                    else:
-                        server_data.mods = int(mods)
-                elif "Assigned ID " in line and " to " in line:
-                    for i, word in enumerate(data):
-                        if data[i - 1] == "ID":
-                            try:
-                                int(word)
-                            except ValueError:
-                                continue
-                            else:
-                                server_data.players[word] = data[-1]
-                                server_data.player_logs.append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
-                                break
-                elif " is now synced!" in line:
-                    for i, word in enumerate(data):
-                        if data[i + 1] == "is":
-                            server_data.player_logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
-                            break
-                elif " Connection Terminated" in line:
-                    for i, word in enumerate(data):
-                        if len(data) > i + 1 and data[i + 1] == "Connection":
-                            for key in server_data.players:
-                                name = server_data.players[key]
-                                if name == word:
-                                    del server_data.players[key]
+                        # Get loaded settings
+                        if server_data.process is not None:
+                            await run_command("settings list")
+                    elif "Loaded " in line and " Mods" in line:
+                        mods = data[-2]
+                        try:
+                            int(mods)
+                        except ValueError:
+                            continue
+                        else:
+                            server_data.mods = int(mods)
+                    elif "Assigned ID " in line and " to " in line:
+                        for i, word in enumerate(data):
+                            if data[i - 1] == "ID":
+                                try:
+                                    int(word)
+                                except ValueError:
+                                    continue
+                                else:
+                                    server_data.players[word] = data[-1]
+                                    server_data.logs.append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
                                     break
-                            server_data.player_logs.append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
-                            break
-            elif data[2] == "[ERROR]":
-                if "bind() failed: Address already in use" in line:
-                    server_data.error = True
-            elif data[2] == "[CHAT]":
-                if data[3] == "<Server>":
-                    sender = data[3].removeprefix("<").removesuffix(">")
-                    receiver = data[5].split(")")[0]
-                    receiver = receiver.replace('"', "'")
-                    message = data[5].split(")")[-1] + " " + " ".join(data[6:])
+                    elif " is now synced!" in line:
+                        for i, word in enumerate(data):
+                            if data[i + 1] == "is":
+                                server_data.logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
+                                break
+                    elif " Connection Terminated" in line:
+                        for i, word in enumerate(data):
+                            if len(data) > i + 1 and data[i + 1] == "Connection":
+                                for key in server_data.players:
+                                    name = server_data.players[key]
+                                    if name == word:
+                                        del server_data.players[key]
+                                        break
+                                server_data.logs.append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
+                                break
+                elif data[2] == "[ERROR]":
+                    if "bind() failed: Address already in use" in line:
+                        server_data.error = True
+                elif data[2] == "[CHAT]":
+                    if data[3] == "<Server>":
+                        sender = data[3].removeprefix("<").removesuffix(">")
+                        receiver = data[5].split(")")[0]
+                        receiver = receiver.replace('"', "'")
+                        message = data[5].split(")")[-1] + " " + " ".join(data[6:])
+                    else:
+                        sender = data[4].removeprefix("<").removesuffix(">")
+                        receiver = "everyone"
+                        message = " ".join(data[5:])
+                    server_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
                 else:
-                    sender = data[4].removeprefix("<").removesuffix(">")
-                    receiver = "everyone"
-                    message = " ".join(data[5:])
-                server_data.chat_logs.append({"sender": sender, "receiver": receiver, "message": message, "timestamp": data[0:2]})
-            else:
-                print(f"Invalid log type {data[2]}")
-        elif "::" in data[0]:
-            if "General::" in data[0]:
-                setting = data[0].split("::")[-1]
-                if not hasattr(server_settings, setting):
+                    print(f"Invalid log type {data[2]}")
+            elif "::" in data[0]:
+                if "General::" in data[0]:
+                    setting = data[0].split("::")[-1]
+                    if not hasattr(server_settings, setting):
+                        continue
+                    value = line.split(" = ")[-1] if " = " in line else line.split(" := ")[-1]
+                    server_settings.model_construct()
+                    if value in ("true", "false"):
+                        value = value == "true"
+                    else:
+                        with contextlib.suppress(ValueError):
+                            value = int(value)
+                    setattr(server_settings, setting, value)
+                elif "Misc::" in data[0]:
                     continue
-                value = line.split(" = ")[-1] if " = " in line else line.split(" := ")[-1]
-                server_settings.model_construct()
-                if value in ("true", "false"):
-                    value = value == "true"
                 else:
-                    with contextlib.suppress(ValueError):
-                        value = int(value)
-                setattr(server_settings, setting, value)
-            elif "Misc::" in data[0]:
+                    print(f"Invalid setting type {data[0]}")
+            elif data[0] == ">":
+                continue
+            elif data[0] == "Mods" and data[1] == "reloaded.":
+                mods = await aioos.listdir("Resources/Client/")
+                mod_count = 0
+                for mod in mods:
+                    if not mod.endswith(".json"):
+                        mod_count += 1
+
+                server_data.mods = mod_count
+            elif (data[0] == "Kicked" and data[1] == "player") or "Error: No player with name matching" in line:
                 continue
             else:
-                print(f"Invalid setting type {data[0]}")
-        elif data[0] == ">":
-            continue
-        elif data[0] == "Mods" and data[1] == "reloaded.":
-            mods = await aioos.listdir("Resources/Client/")
-            mod_count = 0
-            for mod in mods:
-                if not mod.endswith(".json"):
-                    mod_count += 1
-
-            server_data.mods = mod_count
-        elif (data[0] == "Kicked" and data[1] == "player") or "Error: No player with name matching" in line:
-            continue
-        else:
-            print("Invalid line format!")
+                print("Invalid line format!")
     return
 
 async def monitor_logs() -> None:
     """
-    Monitors the Server.log file and processes any new lines.
+    Monitor the Server.log file and process any new lines.
     """
     old_lines = []
 
@@ -981,24 +1117,30 @@ async def monitor_logs() -> None:
             async with aiofiles.open("Server.log") as file:
                 output = await file.read()
 
-                # Save old data and settings to compare with afterwards
-                old_data_dict = server_data.model_dump()
-                old_data_dict["process"] = None # Set process to None before deep copying because it is un-pickleable
-                old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
-                old_settings = server_settings.model_copy(deep=True)
+            # Save old data and settings to compare with afterwards
+            old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+            old_data = ServerData.model_validate_json(old_data_json)
+            old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+            old_settings = server_settings.model_copy(deep=True)
 
-                new_lines = await check_lines(old_lines, output.splitlines())
-                old_lines = output.splitlines()
-                if len(new_lines) > 0:
-                    await process_new_lines(new_lines)
-                    await send_changed_data(old_data, old_settings)
-                    print(f"Processed {len(new_lines)} new lines")
+            new_lines = await check_lines(old_lines, output.splitlines())
+            old_lines = output.splitlines()
+            if len(new_lines) > 0:
+                await process_new_lines(new_lines)
+
+                if configuration.persist_data:
+                    await server_data.persistent_data.trim_logs()
+                    await server_data.persistent_data.dump_and_write()
+
+                await send_changed_data(old_data, old_settings)
+
+                print(f"Processed {len(new_lines)} new lines")
         elif server_data.process is not None:
             reset_server_data()
 
 async def monitor_temp_files() -> None:
     """
-    Deletes temporary files if it has been over a minute since the last write.
+    Delete temporary files if it has been over a minute since the last write.
     """
     while True:
         await asyncio.sleep(1)
