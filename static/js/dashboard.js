@@ -160,8 +160,6 @@ function showReloadModal() {
 }
 
 function showSettingModal() {
-    connection.send(JSON.stringify({"type": "request", "request": "levels"})); // Request an updated list of levels for the level dropdown
-
     // Delete previous form inputs
     let settingLength = settingForm.children.length;
     for (let i = 0; i < settingLength; i++) {
@@ -476,7 +474,7 @@ function createPlayerDiv(playerName) {
     return player;
 }
 
-function createLogDiv(content, timestamp = null, tooltipContent = null) {
+function createLogDiv(content, timestamp = null, tooltipContent = null, logType = "standard") {
     if (tooltipContent === null) {
         tooltipContent = content;
     }
@@ -488,14 +486,34 @@ function createLogDiv(content, timestamp = null, tooltipContent = null) {
     let log = document.createElement("div");
     log.className = "d-flex justify-content-between";
 
-    let heading = document.createElement("h4");
-    heading.className = "text-truncate"
-    heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;"
+    let heading;
+    let hr1;
+    let hr2;
+    if (logType == "standard") {
+        heading = document.createElement("h4");
+        heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
+    } else if (logType == "divider") {
+        heading = document.createElement("h6");
+        heading.style = "overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%; color: #999999;";
+        hr1 = document.createElement("hr");
+        hr1.style = "flex: 1; margin-left: 15px; margin-right: 15px;";
+        hr2 = document.createElement("hr");
+        hr2.style = "flex: 1; margin-left: 15px; margin-right: 15px;";
+    } else {
+        throw Error("Expected logType of value 'standard' or 'divider', got '" + logType + "'");
+    }
+    heading.className = "text-truncate";
     heading.innerHTML = content;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", timestamp + tooltipContent);
     new bootstrap.Tooltip(heading);
+    if (hr1 != null) {
+        log.append(hr1);
+    }
     log.appendChild(heading);
+    if (hr2 != null) {
+        log.append(hr2);
+    }
 
     let div = document.createElement("div");
     div.style = "flex-shrink: 0;"
@@ -574,11 +592,15 @@ function refreshPlayers(playerList) {
     }
 }
 
-function refreshPlayerLogs(logs) {
+function refreshLogs(logs) {
     // Remove old logs
-    let logLength = playerLogs.children.length;
-    for (let i = 0; i < logLength; i++) {
+    let playerLogLength = playerLogs.children.length;
+    for (let i = 0; i < playerLogLength; i++) {
         playerLogs.children[0].remove();
+    }
+    let chatLogLength = chatLogs.children.length;
+    for (let i = 0; i < chatLogLength; i++) {
+        chatLogs.children[0].remove();
     }
 
     // Add logs
@@ -599,23 +621,14 @@ function refreshPlayerLogs(logs) {
             let log = createLogDiv(content, timestamp=logs[i]["timestamp"]);
             log.style = "margin-top: 2%;";
             playerLogs.appendChild(log);
-        }
-    }
-}
-
-function refreshChatLogs(logs) {
-    // Remove old logs
-    let logLength = chatLogs.children.length;
-    for (let i = 0; i < logLength; i++) {
-        chatLogs.children[0].remove();
-    }
-
-    // Add logs
-    for (let i = logs.length - 1; i >= 0; i--) {
-        if (["message"].includes(logs[i]["type"])) {
+        } else if (["message"].includes(logs[i]["type"])) {
             let log = createLogDiv(logs[i]["sender"] + ((logs[i]["receiver"] != "everyone") ? " (to " + logs[i]["receiver"] + ")" : "") + ": " + logs[i]["message"], timestamp=logs[i]["timestamp"]);
             log.style = "margin-top: 2%;";
             chatLogs.appendChild(log);
+        } else if (["start"].includes(logs[i]["type"])) {
+            let log = createLogDiv(logs[i]["message"], timestamp=logs[i]["timestamp"], tooltipContent=null, logType="divider");
+            playerLogs.appendChild(log);
+            chatLogs.appendChild(log.cloneNode(true));
         }
     }
 }
@@ -697,7 +710,7 @@ connection.addEventListener("message", (event) => {
                             let label = document.getElementById("Maplabel");
                             let button2 = document.getElementById("Mapbutton2");
                             let dropdown = document.getElementById("Mapdropdown");
-                            if (input != null && label != null && button2 != null && dropdown != null) {
+                            if (input !== null && label !== null && button2 !== null && dropdown !== null) {
                                 refreshMapDropdown(input, label, button2, dropdown);
                             }
                         } else if (key == "players") {
@@ -705,8 +718,7 @@ connection.addEventListener("message", (event) => {
                             refreshPlayers(server_data["players"]);
                         } else if (key == "logs") {
                             // Reload player logs on join logs change
-                            refreshPlayerLogs(server_data["logs"]);
-                            refreshChatLogs(server_data["logs"]);
+                            refreshLogs(server_data["logs"]);
                         } else if (key == "connected") {
                             // Update server connection text
                             if ("error" in server_data && server_data["error"]) {
@@ -912,11 +924,11 @@ document.getElementById("settingModalButton").addEventListener("click", (event) 
         } else if (child.tagName == "DIV") {
             let checkbox = child.children.namedItem("switch");
             let level = child.children.namedItem("level");
-            if (checkbox != null) {
+            if (checkbox !== null) {
                 if (checkbox.changed) {
                     connection.send(JSON.stringify({"type": "set", "setting": checkbox.id, "value": checkbox.checked}));
                 }
-            } else if (level != null) {
+            } else if (level !== null) {
                 if (level.changed) {
                     connection.send(JSON.stringify({"type": "set", "setting": level.id, "value": level.value}));
                 }
@@ -969,6 +981,5 @@ logsButton.addEventListener("click", () => {
     logsPage.ariaHidden = false;
     logsButton.children[0].classList.add("page-selected");
 
-    refreshPlayerLogs(server_data["logs"]);
-    refreshChatLogs(server_data["logs"]);
+    refreshLogs(server_data["logs"]);
 });
