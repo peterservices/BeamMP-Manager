@@ -1019,6 +1019,8 @@ async def process_new_lines(new_lines: list[str]) -> None:
                             elif data[i - 1].lower() == "port":
                                 server_data.port = int(word)
 
+                        server_data.logs.append({"message": "Server Started", "type": "start", "timestamp": " ".join(data[0:2])})
+
                         # Get loaded settings
                         if server_data.process is not None:
                             await run_command("settings list")
