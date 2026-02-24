@@ -167,10 +167,10 @@ class ServerData(BaseModel):
 
     @computed_field
     @property
-    def levels(self: Self) -> dict[str, list[str] | None] | None:
+    def levels(self: Self) -> list[str] | None:
         if self.persistent_data is None:
             return None
-        return self.persistent_data.levels
+        return list(self.persistent_data.levels.keys())
 
     @computed_field
     @property
@@ -702,10 +702,10 @@ async def upload():
             level = await asyncio.to_thread(detect_zip_levels, temp_path)
             if level is not None:
                 async with server_data.persistent_data.lock:
-                    if level in server_data.levels:
-                        server_data.levels[level].append(mod_hash)
+                    if level in server_data.persistent_data.levels:
+                        server_data.persistent_data.levels[level].append(mod_hash)
                     else:
-                        server_data.levels[level] = [mod_hash]
+                        server_data.persistent_data.levels[level] = [mod_hash]
                 await verify_persistent_fields() # Write the changes to disk and update over the websocket
 
         final_path = safe_join("Resources/Client/", filename)
@@ -770,7 +770,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         mods.update(mods_disabled)
                     return {"mod_list": mods}
                 case "levels":
-                    return {"levels": list(server_data.levels.keys())}
+                    return {"levels": server_data.levels}
         case "command":
             if "command" not in ws_request:
                 return None
@@ -840,10 +840,10 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     level = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
                     if level is not None:
                         async with server_data.persistent_data.lock:
-                            if level in server_data.levels:
-                                server_data.levels[level].append(mods[ws_request["enable"]]["hash"])
+                            if level in server_data.persistent_data.levels:
+                                server_data.persistent_data.levels[level].append(mods[ws_request["enable"]]["hash"])
                             else:
-                                server_data.levels[level] = [mods[ws_request["enable"]]["hash"]]
+                                server_data.persistent_data.levels[level] = [mods[ws_request["enable"]]["hash"]]
                         if configuration.detect_mod_maps:
                             await verify_persistent_fields() # Write the changes to disk and update over the websocket
 
