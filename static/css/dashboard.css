@@ -262,5 +262,5 @@ input.form-check-input:focus {
 }
 
 input.form-check-input:not(:checked):focus {
-background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='rgba(255, 103, 0, 0.75)'/></svg>");
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'><circle r='3' fill='rgba(255, 103, 0, 0.75)'/></svg>");
 }
