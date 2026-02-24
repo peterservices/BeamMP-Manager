@@ -1019,7 +1019,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                             elif data[i - 1].lower() == "port":
                                 server_data.port = int(word)
 
-                        server_data.logs.append({"message": "Server Started", "type": "start", "timestamp": " ".join(data[0:2])})
+                        server_data.persistent_data.logs.append({"message": "Server Started", "type": "start", "timestamp": " ".join(data[0:2])})
 
                         # Get loaded settings
                         if server_data.process is not None:
@@ -1041,12 +1041,12 @@ async def process_new_lines(new_lines: list[str]) -> None:
                                     continue
                                 else:
                                     server_data.players[word] = data[-1]
-                                    server_data.logs.append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
+                                    server_data.persistent_data.logs.append({"player": data[-1], "type": "join", "timestamp": " ".join(data[0:2])})
                                     break
                     elif " is now synced!" in line:
                         for i, word in enumerate(data):
                             if data[i + 1] == "is":
-                                server_data.logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
+                                server_data.persistent_data.logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
                                 break
                     elif " Connection Terminated" in line:
                         for i, word in enumerate(data):
@@ -1056,7 +1056,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                                     if name == word:
                                         del server_data.players[key]
                                         break
-                                server_data.logs.append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
+                                server_data.persistent_data.logs.append({"player": word, "type": "leave", "timestamp": " ".join(data[0:2])})
                                 break
                 elif data[2] == "[ERROR]":
                     if "bind() failed: Address already in use" in line:
@@ -1071,7 +1071,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                         sender = data[4].removeprefix("<").removesuffix(">")
                         receiver = "everyone"
                         message = " ".join(data[5:])
-                    server_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
+                    server_data.persistent_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
                 else:
                     print(f"Invalid log type {data[2]}")
             elif "::" in data[0]:
