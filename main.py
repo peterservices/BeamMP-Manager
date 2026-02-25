@@ -10,6 +10,7 @@ import shutil
 import signal
 import zipfile
 from collections.abc import AsyncGenerator
+from functools import wraps
 from secrets import token_urlsafe
 from typing import Annotated, Any, Literal, Self
 
@@ -31,6 +32,7 @@ from quart import (
     Quart,
     Response,
     abort,
+    current_app,
     redirect,
     render_template,
     request,
@@ -131,6 +133,34 @@ class PersistentData(BaseModel):
                             changes = True
         return changes
 
+    async def add_level_hash(self: Self, file_hash: str, level: str) -> bool:
+        """
+        Add a file hash and it's level. Returns whether any changes were made.
+        """
+        changes = False
+        async with self.lock:
+            if level in self.levels and file_hash not in self.levels[level]:
+                self.levels[level].append(file_hash)
+                changes = True
+            elif level not in self.levels:
+                self.levels[level] = [file_hash]
+                changes = True
+        return changes
+
+    async def remove_level_hash(self: Self, file_hash: str) -> bool:
+        """
+        Remove a file hash from associated levels. Returns whether any changes were made.
+        """
+        changes = False
+        async with self.lock:
+            for key, value in self.levels.copy().items():
+                if value is not None and file_hash in value:
+                    value.remove(file_hash)
+                    if len(value) == 0:
+                        del self.levels[key]
+                        changes = True
+        return changes
+
     lock: asyncio.Lock = Field(exclude=True)
     levels: dict[str, list[str] | None] = {
         "/levels/automation_test_track/info.json": None,
@@ -208,6 +238,7 @@ class TempFile(BaseModel):
     total_bytes: int
     user: str
     hasher: Annotated[object, AfterValidator(_validate_hash_obj)] = hashlib.sha256()
+    expected_next_byte: int = 0
     complete: bool = False
     last_write: datetime.datetime | None = None
 
@@ -297,7 +328,7 @@ async def verify_persistent_fields() -> None:
     # Save old data to compare with after verifying levels
     old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
     old_data = ServerData.model_validate_json(old_data_json)
-    old_data.persistent_data = server_data.persistent_data
+    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
     levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
     if levels or await server_data.persistent_data.trim_logs():
         if configuration.persist_data:
@@ -366,6 +397,20 @@ async def write_config() -> None:
     async with aiofiles.open("config.json", "w") as file:
         await file.write(to_write)
 
+def authorization_required(func):
+    """
+    Ensures the user is logged in and is in the authorized_users list.
+    """
+    @wraps(func)
+    @login_required
+    async def wrapper(*args, **kwargs):
+        if int(current_user.auth_id) not in configuration.authorized_users:
+            raise Unauthorized()
+
+        return await current_app.ensure_async(func)(*args, **kwargs)
+
+    return wrapper
+
 # -- Website routes --
 
 @app.route(f"{configuration.url_base_path}/")
@@ -373,7 +418,7 @@ async def main_page():
     return redirect(f"{configuration.url_base_path}/dashboard")
 
 @app.route(f"{configuration.url_base_path}/dashboard")
-@login_required
+@authorization_required
 async def dashboard():
     return await render_template("dashboard.html", base=configuration.url_base_path)
 
@@ -431,7 +476,7 @@ async def oauth_login():
     identify = await access.fetch_identify()
     if "id" in identify:
         if int(identify["id"]) in configuration.authorized_users:
-            auth = AuthUser(identify["id"])
+            auth = AuthUser(auth_id=identify["id"])
             login_user(auth, True)
             session.pop("error")
             return redirect(f"{configuration.url_base_path}/dashboard")
@@ -565,7 +610,7 @@ def detect_zip_levels(path) -> str | None:
     return filename
 
 @app.route(f"{configuration.url_base_path}/upload", methods=["POST"])
-@login_required
+@authorization_required
 async def upload():
     content_range = request.headers.get("Content-Range")
     form = await request.form
@@ -602,12 +647,12 @@ async def upload():
     # Validate request
     if chunk.content_type != "application/octet-stream":
         return abort(415)
-    if not filename.endswith(".zip") or len(filename) <= 4 or len(filename) > 24:
+    if not filename.endswith(".zip") or len(filename) <= 4 or len(filename) > 24: # Make sure filename is long enough to contain a character and '.zip'
         return abort(400)
     if filename in await aioos.listdir("Resources/Client/") or filename in await aioos.listdir("Resources/Client.disabled/"):
         return abort(409)
 
-    if total / (1024 * 1024 * 1024) >= 1: # Max 1 GB
+    if total / (1024 * 1024 * 1024) >= 1: # Max 1 GiB
         return abort(413)
 
     temp_path = safe_join("Resources/Client.temp/", filename + ".part")
@@ -621,18 +666,23 @@ async def upload():
         temp_files[filename] = TempFile(total_bytes=total, user=current_user.auth_id)
     elif filename in temp_files and temp_files[filename].user != current_user.auth_id:
         return abort(403)
-    elif filename not in temp_files or temp_files[filename].total_bytes != total:
+    elif filename not in temp_files or temp_files[filename].total_bytes != total or temp_files[filename].expected_next_byte != start or end >= total:
         return abort(400)
     elif filename in temp_files and temp_files[filename].complete:
         return abort(409)
 
     temp_files[filename].last_write = datetime.datetime.now()
 
-    towrite: bytes = chunk.read()
-    temp_files[filename].hasher.update(towrite)
+    to_write: bytes = chunk.read()
+    if len(to_write) != end - start + 1:
+        return abort (400)
+
+    temp_files[filename].hasher.update(to_write)
     async with aiofiles.open(temp_path, "ab") as f:
         await f.seek(start)
-        await f.write(towrite)
+        await f.write(to_write)
+        current_pos = await f.tell()
+    temp_files[filename].expected_next_byte = current_pos
 
     # Check if the file is a zip file
     if start == 0:
@@ -701,12 +751,12 @@ async def upload():
         if configuration.detect_mod_maps:
             level = await asyncio.to_thread(detect_zip_levels, temp_path)
             if level is not None:
-                async with server_data.persistent_data.lock:
-                    if level in server_data.persistent_data.levels:
-                        server_data.persistent_data.levels[level].append(mod_hash)
-                    else:
-                        server_data.persistent_data.levels[level] = [mod_hash]
-                await verify_persistent_fields() # Write the changes to disk and update over the websocket
+                old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+                old_data = ServerData.model_validate_json(old_data_json)
+                old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+                if await server_data.persistent_data.add_level_hash(mod_hash, level) and configuration.persist_data:
+                    await server_data.persistent_data.dump_and_write() # Write the changes to disk
+                await send_changed_data(old_data) # Update levels over websocket
 
         final_path = safe_join("Resources/Client/", filename)
         shutil.move(temp_path, final_path)
@@ -839,13 +889,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 if configuration.detect_mod_maps:
                     level = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
                     if level is not None:
-                        async with server_data.persistent_data.lock:
-                            if level in server_data.persistent_data.levels:
-                                server_data.persistent_data.levels[level].append(mods[ws_request["enable"]]["hash"])
-                            else:
-                                server_data.persistent_data.levels[level] = [mods[ws_request["enable"]]["hash"]]
-                        if configuration.detect_mod_maps:
-                            await verify_persistent_fields() # Write the changes to disk and update over the websocket
+                        old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+                        old_data = ServerData.model_validate_json(old_data_json)
+                        old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+                        if await server_data.persistent_data.add_level_hash(mods[ws_request["enable"]]["hash"], level) and configuration.persist_data:
+                            await server_data.persistent_data.dump_and_write() # Write the changes to disk and update over the websocket
+                        await send_changed_data(old_data)
 
             # Reload mods to update mods list
             await run_command("reloadmods")
@@ -878,7 +927,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             await run_command("reloadmods")
             # Remove the mod hash from any level filepaths, if applicable
             if configuration.detect_mod_maps:
-                await verify_persistent_fields()
+                old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+                old_data = ServerData.model_validate_json(old_data_json)
+                old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+                if await server_data.persistent_data.remove_level_hash(mods[ws_request["disable"]]["hash"]) and configuration.persist_data:
+                    await server_data.persistent_data.dump_and_write()
+                await send_changed_data(old_data)
 
             return {"success": True, "action": "disable"}
         case "delete":
@@ -904,11 +958,20 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
                     await file.write(to_write)
             else:
+                async with aiofiles.open("Resources/Client/mods.json") as file:
+                    mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
+                if mods is not None and ws_request["delete"] in mods:
+                    mod_hash = mods[ws_request["delete"]]["hash"]
                 # Reload mods to update mods list if deleted mod was enabled
                 await run_command("reloadmods")
                 # Remove the mod hash from any level filepaths, if applicable
                 if configuration.detect_mod_maps:
-                    await verify_persistent_fields()
+                    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+                    old_data = ServerData.model_validate_json(old_data_json)
+                    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+                    if await server_data.persistent_data.remove_level_hash(mod_hash) and configuration.persist_data:
+                        await server_data.persistent_data.dump_and_write()
+                    await send_changed_data(old_data)
 
             return {"success": True, "action": "delete"}
         case "get":
@@ -940,6 +1003,20 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
 
                     return {"action": ws_request["setting"], "type": "settings"}
                 return {"action": "set", "success": False}
+        case "clear":
+            if "data" not in ws_request:
+                return None
+            match ws_request["data"]:
+                case "logs":
+                    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+                    old_data = ServerData.model_validate_json(old_data_json)
+                    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+                    server_data.persistent_data.logs.clear()
+                    if configuration.persist_data:
+                        await server_data.persistent_data.dump_and_write()
+                    await send_changed_data(old_data)
+                    return {"action": "clear", "success": True}
+            return {"action": "clear", "success": False}
         case "ping":
             return True
     return None
@@ -960,7 +1037,7 @@ async def receive() -> None:
         await websocket.send(json.dumps(result))
 
 @app.websocket(f"{configuration.url_base_path}/ws")
-@login_required
+@authorization_required
 async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
@@ -1130,8 +1207,8 @@ async def monitor_logs() -> None:
             if len(new_lines) > 0:
                 await process_new_lines(new_lines)
 
+                await server_data.persistent_data.trim_logs()
                 if configuration.persist_data:
-                    await server_data.persistent_data.trim_logs()
                     await server_data.persistent_data.dump_and_write()
 
                 await send_changed_data(old_data, old_settings)
