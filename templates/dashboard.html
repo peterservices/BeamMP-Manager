@@ -105,7 +105,7 @@
                 </div>
             </div>
             <a href="#" id="uploadButton" style="text-decoration: none;">
-                <button type="button" class="btn upload-button position-absolute start-50 bottom-0 translate-middle-x" style="border-style: none;">
+                <button type="button" class="btn bottom-button position-absolute start-50 bottom-0 translate-middle-x" style="border-style: none;">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-upload" viewBox="0 0 16 16">
                         <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
                         <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708z"/>
@@ -137,6 +137,11 @@
                     </div>
                 </div>
             </div>
+            <a href="#" id="clearLogsButton" style="text-decoration: none;">
+                <button type="button" class="btn bottom-button clear-button position-absolute start-50 bottom-0 translate-middle-x" style="border-style: none;">
+                    Clear Logs
+                </button>
+            </a>
         </div>
 
         <div class="container position-absolute top-50 start-50 translate-middle styled-single-button-container" style="min-height: 40px;" hidden="true">
@@ -206,6 +211,23 @@
                     <div class="modal-footer">
                         <button id="cancelUpload" type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
                         <button id="uploadModalButton" type="submit" class="btn btn-orange" form="uploadForm">Upload</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="clearModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="clearLogsModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5">Clear Logs</h1>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        This operation is irreversible!
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Cancel</button>
+                        <button id="clearModalButton" type="button" class="btn btn-red">Clear</button>
                     </div>
                 </div>
             </div>

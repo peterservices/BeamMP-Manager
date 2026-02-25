@@ -11,6 +11,7 @@ const infoToast = document.getElementById("infoToast");
 const toastContainer = document.querySelector(".toast-container");
 
 const uploadModal = document.getElementById("uploadModal");
+const clearModal = document.getElementById("clearModal");
 const kickModal = document.getElementById("kickModal");
 const messageModal = document.getElementById("messageModal");
 const deleteModal = document.getElementById("deleteModal");
@@ -44,6 +45,7 @@ let server_settings = {};
 const connection = new WebSocket("ws");
 
 const uploadModalBS = bootstrap.Modal.getOrCreateInstance(uploadModal);
+const clearModalBS = bootstrap.Modal.getOrCreateInstance(clearModal);
 const kickModalBS = bootstrap.Modal.getOrCreateInstance(kickModal);
 const messageModalBS = bootstrap.Modal.getOrCreateInstance(messageModal);
 const deleteModalBS = bootstrap.Modal.getOrCreateInstance(deleteModal);
@@ -117,6 +119,10 @@ function showUploadModal() {
     uploadModalBS.show();
 }
 
+function showClearModal() {
+    clearModalBS.show();
+}
+
 function showKickModal(playerName) {
     kickModalLabel.innerHTML = "Kick " + playerName;
     kickReason.value = null;
@@ -140,6 +146,9 @@ function showRestartModal() {
 function showReloadModal() {
     if (!uploadModal.ariaHidden) {
         uploadModalBS.hide();
+    }
+    if (!clearModal.ariaHidden) {
+        clearModalBS.hide();
     }
     if (!kickModal.ariaHidden) {
         kickModalBS.hide();
@@ -882,6 +891,15 @@ document.getElementById("deleteModalButton").addEventListener("click", () => {
     deleteButton.children[0].disabled = true;
     deleteModalBS.hide();
     connection.send(JSON.stringify({"type": "delete", "delete": modName}));
+});
+
+document.getElementById("clearLogsButton").addEventListener("click", () => {
+    showClearModal();
+});
+
+document.getElementById("clearModalButton").addEventListener("click", () => {
+    clearModalBS.hide();
+    connection.send(JSON.stringify({"type": "clear", "data": "logs"}));
 });
 
 document.getElementById("restartServerButton").addEventListener("click", () => {
