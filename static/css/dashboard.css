@@ -234,19 +234,19 @@ button.btn-red:active {
     background-color: #cc0000 !important;
 }
 
-button.upload-button {
+button.bottom-button {
     color: #000000;
     background-color: #c2d3de;
     border-style: none;
     margin-bottom: 2%;
 }
 
-button.upload-button:hover {
+button.bottom-button:hover {
     color: #FFFFFF;
     background-color: #c2d3de;
 }
 
-button.upload-button:active {
+button.bottom-button:active {
     color: #000000 !important;
     background-color: #c2d3de !important;
 }
