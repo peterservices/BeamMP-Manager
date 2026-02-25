@@ -1,9 +1,9 @@
 import asyncio
 import contextlib
-import copy
 import datetime
 import hashlib
 import json
+import logging
 import os
 import re
 import shutil
@@ -51,6 +51,9 @@ from quart_auth import (
 )
 from werkzeug.datastructures import FileStorage
 from werkzeug.utils import safe_join, secure_filename
+
+logging.basicConfig(level=logging.DEBUG, format="[BeamMP Manager] [%(levelname)s] %(message)s")
+logger = logging.getLogger(__name__)
 
 DOTENV_PATH = find_dotenv()
 load_dotenv(dotenv_path=DOTENV_PATH)
@@ -107,6 +110,7 @@ class PersistentData(BaseModel):
             end_index = logs_length - configuration.maximum_log_entries
             async with self.lock:
                 del self.logs[0:end_index]
+            changes = True
         return changes
 
     async def verify_levels(self: Self) -> bool:
@@ -127,7 +131,7 @@ class PersistentData(BaseModel):
                     if value is not None:
                         for mod_hash in value.copy():
                             if mod_hash not in hashes:
-                                value.pop(value.index(mod_hash))
+                                value.remove(mod_hash)
                         if len(value) == 0:
                             del self.levels[key]
                             changes = True
@@ -161,7 +165,7 @@ class PersistentData(BaseModel):
                         changes = True
         return changes
 
-    lock: asyncio.Lock = Field(exclude=True)
+    lock: asyncio.Lock = Field(default_factory=asyncio.Lock, exclude=True)
     levels: dict[str, list[str] | None] = {
         "/levels/automation_test_track/info.json": None,
         "/levels/cliff/info.json": None,
@@ -226,6 +230,7 @@ class ServerSettings(BaseModel):
     ResourceFolder: str | None = None
 
 class TempFile(BaseModel):
+    @staticmethod
     def _validate_hash_obj(obj: object) -> object:
         """
         Validate that the object is a HASH object.
@@ -237,7 +242,7 @@ class TempFile(BaseModel):
 
     total_bytes: int
     user: str
-    hasher: Annotated[object, AfterValidator(_validate_hash_obj)] = hashlib.sha256()
+    hasher: Annotated[object, AfterValidator(_validate_hash_obj)] = Field(default_factory=hashlib.sha256)
     expected_next_byte: int = 0
     complete: bool = False
     last_write: datetime.datetime | None = None
@@ -282,7 +287,7 @@ else:
         with open("config.json", "w") as file:
             file.write(to_write)
 
-persistent_data = PersistentData(lock=asyncio.Lock())
+persistent_data = PersistentData()
 if configuration.persist_data:
     if not os.path.exists("persistent_data.json"):
         to_write = configuration.model_dump_json(indent=5)
@@ -306,9 +311,12 @@ oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, red
 
 server_data = ServerData(persistent_data=persistent_data)
 server_settings = ServerSettings()
+state_lock: asyncio.Lock = asyncio.Lock()
 broker = Broker()
 websockets: list[asyncio.Task] = []
 temp_files: dict[str, TempFile] = {}
+temp_files_lock: asyncio.Lock = asyncio.Lock()
+log_file_position: int = 0
 
 async def run_command(command_str: str) -> None:
     """
@@ -320,20 +328,6 @@ async def run_command(command_str: str) -> None:
     command = command_str.encode()
     server_data.process.stdin.write(command)
     await server_data.process.stdin.drain()
-
-async def verify_persistent_fields() -> None:
-    """
-    Verify all the fields in persistent_data, and update the disk (if enabled) and websocket if changes were made.
-    """
-    # Save old data to compare with after verifying levels
-    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-    old_data = ServerData.model_validate_json(old_data_json)
-    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-    levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
-    if levels or await server_data.persistent_data.trim_logs():
-        if configuration.persist_data:
-            await server_data.persistent_data.dump_and_write()
-        await send_changed_data(old_data)
 
 async def send_changed_data(old_data: ServerData, old_settings: ServerSettings | None = None) -> None:
     changes = {}
@@ -372,22 +366,47 @@ def reset_server_settings() -> None:
     global server_settings
     server_settings = ServerSettings()
 
+def snapshot_server_data() -> ServerData:
+    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
+    old_data = ServerData.model_validate_json(old_data_json)
+    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
+    return old_data
+
+def snapshot_settings() -> ServerSettings:
+    return server_settings.model_copy(deep=True)
+
+async def verify_persistent_fields() -> None:
+    """
+    Verify all the fields in persistent_data, and update the disk (if enabled) and websocket if changes were made.
+    """
+    async with state_lock:
+        old_data = snapshot_server_data() # Save old data to compare with after verifying levels
+        levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
+        if levels or await server_data.persistent_data.trim_logs():
+            if configuration.persist_data:
+                await server_data.persistent_data.dump_and_write()
+            await send_changed_data(old_data)
+
 async def start_server() -> None:
     """
     Start the BeamMP Server.
     """
-    old_data_dict = server_data.model_dump()
-    old_data = ServerData.model_validate(copy.deepcopy(old_data_dict))
-    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-    async with aiofiles.open("Server.log", "w") as file:
-        await file.writelines("")
+    global log_file_position
+    old_data = snapshot_server_data()
+    try:
+        async with aiofiles.open("Server.log", "w") as file:
+            await file.writelines("")
+    except OSError as e:
+        logger.exception("Could not open and write to Server.log")
+        raise e
+    log_file_position = 0
     if configuration.persist_data:
         await verify_persistent_fields()
     reset_server_settings()
     reset_server_data()
     await send_changed_data(old_data)
     if os.path.exists(configuration.beammp_executable_path):
-        server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE, stdin=asyncio.subprocess.PIPE)
+        server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
 
 async def write_config() -> None:
     """
@@ -465,7 +484,7 @@ async def login_uri():
 @app.route(f"{configuration.url_base_path}/login/oauth2")
 async def oauth_login():
     session.permanent = True
-    app.permanent_session_lifetime = datetime.timedelta(seconds=30)
+    app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
     session["error"] = "error"
 
     code = request.args.get("code")
@@ -632,139 +651,139 @@ async def upload():
 
     filename = secure_filename(filename + ".zip")
 
-    # Check if chunk is a request to abort the upload
-    if chunk == "false":
-        if filename in temp_files:
-            if temp_files[filename].user != current_user.auth_id:
-                return abort(403)
-            if temp_files[filename].total_bytes == total:
-                path = safe_join("Resources/Client.temp/", filename + ".part")
-                await aioos.remove(path)
-                del temp_files[filename]
-                return Response("Aborted upload", 200)
-        return abort(400)
+    async with temp_files_lock:
+        # Check if chunk is a request to abort the upload
+        if chunk == "false":
+            if filename in temp_files:
+                if temp_files[filename].user != current_user.auth_id:
+                    return abort(403)
+                if temp_files[filename].total_bytes == total:
+                    path = safe_join("Resources/Client.temp/", filename + ".part")
+                    await aioos.remove(path)
+                    del temp_files[filename]
+                    return Response("Aborted upload", 200)
+            return abort(400)
 
-    # Validate request
-    if chunk.content_type != "application/octet-stream":
-        return abort(415)
-    if not filename.endswith(".zip") or len(filename) <= 4 or len(filename) > 24: # Make sure filename is long enough to contain a character and '.zip'
-        return abort(400)
-    if filename in await aioos.listdir("Resources/Client/") or filename in await aioos.listdir("Resources/Client.disabled/"):
-        return abort(409)
-
-    if total / (1024 * 1024 * 1024) >= 1: # Max 1 GiB
-        return abort(413)
-
-    temp_path = safe_join("Resources/Client.temp/", filename + ".part")
-    if temp_path is None:
-        return abort(400)
-
-    if start == 0:
-        if filename in temp_files:
+        # Validate request
+        if chunk.content_type != "application/octet-stream":
+            return abort(415)
+        if not filename.endswith(".zip") or len(filename) <= 4 or len(filename) > 24: # Make sure filename is long enough to contain a character and '.zip'
+            return abort(400)
+        if filename in await aioos.listdir("Resources/Client/") or filename in await aioos.listdir("Resources/Client.disabled/"):
             return abort(409)
 
-        temp_files[filename] = TempFile(total_bytes=total, user=current_user.auth_id)
-    elif filename in temp_files and temp_files[filename].user != current_user.auth_id:
-        return abort(403)
-    elif filename not in temp_files or temp_files[filename].total_bytes != total or temp_files[filename].expected_next_byte != start or end >= total:
-        return abort(400)
-    elif filename in temp_files and temp_files[filename].complete:
-        return abort(409)
+        if total / (1024 * 1024 * 1024) >= 1: # Max 1 GiB
+            return abort(413)
 
-    temp_files[filename].last_write = datetime.datetime.now()
+        temp_path = safe_join("Resources/Client.temp/", filename + ".part")
+        if temp_path is None:
+            return abort(400)
 
-    to_write: bytes = chunk.read()
-    if len(to_write) != end - start + 1:
-        return abort (400)
+        if start == 0:
+            if filename in temp_files:
+                return abort(409)
 
-    temp_files[filename].hasher.update(to_write)
-    async with aiofiles.open(temp_path, "ab") as f:
-        await f.seek(start)
-        await f.write(to_write)
-        current_pos = await f.tell()
-    temp_files[filename].expected_next_byte = current_pos
+            temp_files[filename] = TempFile(total_bytes=total, user=current_user.auth_id)
+        elif filename in temp_files and temp_files[filename].user != current_user.auth_id:
+            return abort(403)
+        elif filename not in temp_files or temp_files[filename].total_bytes != total or temp_files[filename].expected_next_byte != start or end >= total:
+            return abort(400)
+        elif filename in temp_files and temp_files[filename].complete:
+            return abort(409)
 
-    # Check if the file is a zip file
-    if start == 0:
-        async with aiofiles.open(temp_path, "rb") as f:
-            header = await f.read(4)
-            if not header.startswith(b'\x50\x4B\x03\x04'):
+        temp_files[filename].last_write = datetime.datetime.now()
+
+        to_write: bytes = chunk.read()
+        if len(to_write) != end - start + 1:
+            return abort (400)
+
+        temp_files[filename].hasher.update(to_write)
+        async with aiofiles.open(temp_path, "ab") as f:
+            await f.seek(start)
+            await f.write(to_write)
+            current_pos = await f.tell()
+        temp_files[filename].expected_next_byte = current_pos
+
+        # Check if the file is a zip file
+        if start == 0:
+            async with aiofiles.open(temp_path, "rb") as f:
+                header = await f.read(4)
+                if not header.startswith(b'\x50\x4B\x03\x04'):
+                    await aioos.remove(temp_path)
+                    return abort(415)
+
+        if end + 1 == total:
+            mod_hash = temp_files[filename].hasher.hexdigest()
+            temp_files[filename].complete = True
+            # Check if the zip file is valid
+            valid = await asyncio.to_thread(check_zip_sync, temp_path)
+            if not valid:
                 await aioos.remove(temp_path)
                 return abort(415)
 
-    if end + 1 == total:
-        mod_hash = temp_files[filename].hasher.hexdigest()
-        temp_files[filename].complete = True
-        # Check if the zip file is valid
-        valid = await asyncio.to_thread(check_zip_sync, temp_path)
-        if not valid:
-            await aioos.remove(temp_path)
-            return abort(415)
+            # Check if file is malicious with VirusTotal
+            if configuration.virustotal_scanning:
+                if VT_KEY is None:
+                    raise KeyError("The VT_KEY environment variable is required for VirusTotal scanning.")
+                async with vt.Client(VT_KEY) as client: # Regular 'with vt.Client()' doesn't work for some reason so we use 'async with vt.Client()'
+                    try:
+                        vt_file = await client.get_object_async(f"/files/{mod_hash}")
+                        if vt_file.error is not None:
+                            raise vt.error.APIError("NotFoundError", "Analysis stats not found.") # Manually raise a NotFoundError to trigger a scan if there is an error
+                        analysis_stats = vt_file.last_analysis_stats
+                        total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
+                        bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
+                        if total == 0 or bad / total > 0.25:
+                            await aioos.remove(temp_path)
+                            del temp_files[filename]
+                            return abort(422) # Refuse to upload the file if the file is too suspicious
+                    except vt.error.APIError as error:
+                        if error.code == "NotFoundError":
+                            if await aioos.path.getsize(temp_path) >= 650 * 1000 * 1000: # Don't allow to upload files over 650MB to VirusTotal
+                                return abort(413)
+                            with open(temp_path, "rb") as file:
+                                try:
+                                    await client.scan_file_async(file, wait_for_completion=True)
+                                    vt_file = await client.get_object_async(f"/files/{mod_hash}")
+                                except vt.error.APIError as error:
+                                    await aioos.remove(temp_path)
+                                    del temp_files[filename]
+                                    raise error
 
-        # Check if file is malicious with VirusTotal
-        if configuration.virustotal_scanning:
-            if VT_KEY is None:
-                raise KeyError("The VT_KEY environment variable is required for VirusTotal scanning.")
-            async with vt.Client(VT_KEY) as client: # Regular 'with vt.Client()' doesn't work for some reason so we use 'async with vt.Client()'
-                try:
-                    vt_file = await client.get_object_async(f"/files/{mod_hash}")
-                    if vt_file.error is not None:
-                        raise vt.error.APIError("NotFoundError", "Analysis stats not found.") # Manually raise a NotFoundError to trigger a scan if there is an error
-                    analysis_stats = vt_file.last_analysis_stats
-                    total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
-                    bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
-                    if total == 0 or bad / total > 0.25:
-                        await aioos.remove(temp_path)
-                        del temp_files[filename]
-                        return abort(422) # Refuse to upload the file if the file is too suspicious
-                except vt.error.APIError as error:
-                    if error.code == "NotFoundError":
-                        if await aioos.path.getsize(temp_path) >= 650000000: # Don't allow to upload files over 650MB to VirusTotal
-                            return abort(413)
-                        with open(temp_path, "rb") as file:
-                            try:
-                                await client.scan_file_async(file, wait_for_completion=True)
-                                vt_file = await client.get_object_async(f"/files/{mod_hash}")
-                            except vt.error.APIError as error:
-                                await aioos.remove(temp_path)
-                                del temp_files[filename]
-                                raise error
+                                if vt_file.error is not None:
+                                    await aioos.remove(temp_path)
+                                    del temp_files[filename]
+                                    return abort(500)
 
-                            if vt_file.error is not None:
-                                await aioos.remove(temp_path)
-                                del temp_files[filename]
-                                return abort(500)
+                                analysis_stats = vt_file.last_analysis_stats
+                                total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
+                                bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
+                                if total == 0 or bad / total > 0.25:
+                                    await aioos.remove(temp_path)
+                                    del temp_files[filename]
+                                    return abort(422) # Refuse to upload the file if the file is too suspicious
+                        else:
+                            await aioos.remove(temp_path)
+                            del temp_files[filename]
+                            raise error
 
-                            analysis_stats = vt_file.last_analysis_stats
-                            total = analysis_stats["malicious"] + analysis_stats["suspicious"] + analysis_stats["undetected"] + analysis_stats["harmless"]
-                            bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
-                            if total == 0 or bad / total > 0.25:
-                                await aioos.remove(temp_path)
-                                del temp_files[filename]
-                                return abort(422) # Refuse to upload the file if the file is too suspicious
-                    else:
-                        await aioos.remove(temp_path)
-                        del temp_files[filename]
-                        raise error
+            # Add the level path to the configuration, if enabled
+            if configuration.detect_mod_maps:
+                level = await asyncio.to_thread(detect_zip_levels, temp_path)
+                if level is not None:
+                    async with state_lock:
+                        old_data = snapshot_server_data()
+                        if await server_data.persistent_data.add_level_hash(mod_hash, level) and configuration.persist_data:
+                            await server_data.persistent_data.dump_and_write() # Write the changes to disk
+                        await send_changed_data(old_data) # Update levels over websocket
 
-        # Add the level path to the configuration, if enabled
-        if configuration.detect_mod_maps:
-            level = await asyncio.to_thread(detect_zip_levels, temp_path)
-            if level is not None:
-                old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-                old_data = ServerData.model_validate_json(old_data_json)
-                old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-                if await server_data.persistent_data.add_level_hash(mod_hash, level) and configuration.persist_data:
-                    await server_data.persistent_data.dump_and_write() # Write the changes to disk
-                await send_changed_data(old_data) # Update levels over websocket
+            final_path = safe_join("Resources/Client/", filename)
+            shutil.move(temp_path, final_path)
+            del temp_files[filename]
+            await run_command("reloadmods")
+            return Response(filename, 201)
 
-        final_path = safe_join("Resources/Client/", filename)
-        shutil.move(temp_path, final_path)
-        del temp_files[filename]
-        await run_command("reloadmods")
-        return Response(filename, 201)
-
-    return Response("Chunk stored", 206)
+        return Response("Chunk stored", 206)
 
 # -- Data Websocket --
 
@@ -808,17 +827,17 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                             mod.pop("protected")
                             mod["enabled"] = True
 
-                    mods_disabled = None
-                    async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
-                        mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
-                    if mods_disabled is not None:
-                        for _, mod in mods_disabled.items():
-                            mod.pop("hash")
-                            mod.pop("lastwrite")
-                            mod.pop("protected")
-                            mod["enabled"] = False
-                        mods.update(mods_disabled)
-                    return {"mod_list": mods}
+                        mods_disabled = None
+                        async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
+                            mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
+                        if mods_disabled is not None:
+                            for _, mod in mods_disabled.items():
+                                mod.pop("hash")
+                                mod.pop("lastwrite")
+                                mod.pop("protected")
+                                mod["enabled"] = False
+                            mods.update(mods_disabled)
+                        return {"mod_list": mods}
                 case "levels":
                     return {"levels": server_data.levels}
         case "command":
@@ -833,7 +852,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 case "stop":
                     if server_data.process is not None:
                         server_data.process.terminate()
-                        reset_server_data()
+                        async with state_lock:
+                            reset_server_data()
                         return {"action": "stop"}
                     return {"action": "stop", "success": False}
                 case "kick":
@@ -889,12 +909,11 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 if configuration.detect_mod_maps:
                     level = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
                     if level is not None:
-                        old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-                        old_data = ServerData.model_validate_json(old_data_json)
-                        old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-                        if await server_data.persistent_data.add_level_hash(mods[ws_request["enable"]]["hash"], level) and configuration.persist_data:
-                            await server_data.persistent_data.dump_and_write() # Write the changes to disk and update over the websocket
-                        await send_changed_data(old_data)
+                        async with state_lock:
+                            old_data = snapshot_server_data()
+                            if await server_data.persistent_data.add_level_hash(mods[ws_request["enable"]]["hash"], level) and configuration.persist_data:
+                                await server_data.persistent_data.dump_and_write() # Write the changes to disk and update over the websocket
+                            await send_changed_data(old_data)
 
             # Reload mods to update mods list
             await run_command("reloadmods")
@@ -927,12 +946,11 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             await run_command("reloadmods")
             # Remove the mod hash from any level filepaths, if applicable
             if configuration.detect_mod_maps:
-                old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-                old_data = ServerData.model_validate_json(old_data_json)
-                old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-                if await server_data.persistent_data.remove_level_hash(mods[ws_request["disable"]]["hash"]) and configuration.persist_data:
-                    await server_data.persistent_data.dump_and_write()
-                await send_changed_data(old_data)
+                async with state_lock:
+                    old_data = snapshot_server_data()
+                    if await server_data.persistent_data.remove_level_hash(mods[ws_request["disable"]]["hash"]) and configuration.persist_data:
+                        await server_data.persistent_data.dump_and_write()
+                    await send_changed_data(old_data)
 
             return {"success": True, "action": "disable"}
         case "delete":
@@ -962,17 +980,15 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                 if mods is not None and ws_request["delete"] in mods:
                     mod_hash = mods[ws_request["delete"]]["hash"]
-                # Reload mods to update mods list if deleted mod was enabled
-                await run_command("reloadmods")
-                # Remove the mod hash from any level filepaths, if applicable
-                if configuration.detect_mod_maps:
-                    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-                    old_data = ServerData.model_validate_json(old_data_json)
-                    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-                    if await server_data.persistent_data.remove_level_hash(mod_hash) and configuration.persist_data:
-                        await server_data.persistent_data.dump_and_write()
-                    await send_changed_data(old_data)
-
+                    # Reload mods to update mods list if deleted mod was enabled
+                    await run_command("reloadmods")
+                    # Remove the mod hash from any level filepaths, if applicable
+                    if configuration.detect_mod_maps:
+                        async with state_lock:
+                            old_data = snapshot_server_data()
+                            if await server_data.persistent_data.remove_level_hash(mod_hash) and configuration.persist_data:
+                                await server_data.persistent_data.dump_and_write()
+                            await send_changed_data(old_data)
             return {"success": True, "action": "delete"}
         case "get":
             if "setting" not in ws_request:
@@ -986,35 +1002,35 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             if "setting" not in ws_request or "value" not in ws_request:
                 return None
             if hasattr(server_settings, ws_request["setting"]):
-                if type(ws_request["value"]) is not type(getattr(server_settings, ws_request["setting"])):
+                expected_value = getattr(server_settings, ws_request["setting"])
+                if not isinstance(ws_request["value"], type(expected_value)):
                     return None
                 if server_data.process is not None:
                     await run_command(f"settings set General {ws_request["setting"]} {json.dumps(ws_request["value"])}")
 
-                    # Save the setting change to disk so it is preserved after restart
-                    if configuration.preserve_setting_changes and os.path.exists("ServerConfig.toml"):
-                        async with aiofiles.open("ServerConfig.toml") as file:
-                            toml_str = await file.read()
-                        toml = tomlkit.parse(toml_str)
-                        toml["General"][ws_request["setting"]] = ws_request["value"]
-                        to_write = tomlkit.dumps(toml)
-                        async with aiofiles.open("ServerConfig.toml", "w") as file:
-                            await file.write(to_write)
+                # Save the setting change to disk so it is preserved after restart
+                if configuration.preserve_setting_changes and os.path.exists("ServerConfig.toml"):
+                    async with aiofiles.open("ServerConfig.toml") as file:
+                        toml_str = await file.read()
+                    toml = tomlkit.parse(toml_str)
+                    toml["General"][ws_request["setting"]] = ws_request["value"]
+                    to_write = tomlkit.dumps(toml)
+                    async with aiofiles.open("ServerConfig.toml", "w") as file:
+                        await file.write(to_write)
 
-                    return {"action": ws_request["setting"], "type": "settings"}
-                return {"action": "set", "success": False}
+                return {"action": ws_request["setting"], "type": "settings"}
+            return {"action": "set", "success": False}
         case "clear":
             if "data" not in ws_request:
                 return None
             match ws_request["data"]:
                 case "logs":
-                    old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-                    old_data = ServerData.model_validate_json(old_data_json)
-                    old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-                    server_data.persistent_data.logs.clear()
-                    if configuration.persist_data:
-                        await server_data.persistent_data.dump_and_write()
-                    await send_changed_data(old_data)
+                    async with state_lock:
+                        old_data = snapshot_server_data()
+                        server_data.persistent_data.logs.clear()
+                        if configuration.persist_data:
+                            await server_data.persistent_data.dump_and_write()
+                        await send_changed_data(old_data)
                     return {"action": "clear", "success": True}
             return {"action": "clear", "success": False}
         case "ping":
@@ -1062,16 +1078,6 @@ async def websocket_connect():
 async def redirect_to_login(*_):
     return redirect(f"{configuration.url_base_path}/login")
 
-async def check_lines(old: list[str], output: list[str]) -> list[str]:
-    new_lines = []
-    for i, line in enumerate(output):
-        if i >= len(old):
-            new_lines.extend(output[i:])
-            return new_lines
-        if line != old[i]:
-            new_lines.append(line)
-    return new_lines
-
 async def process_new_lines(new_lines: list[str]) -> None:
     async with server_data.persistent_data.lock:
         for line in new_lines:
@@ -1093,7 +1099,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                                     continue
                                 else:
                                     server_data.max_clients = int(word)
-                            elif data[i - 1].lower() == "port":
+                            elif i >= 1 and data[i - 1].lower() == "port":
                                 server_data.port = int(word)
 
                         server_data.persistent_data.logs.append({"message": "Server Started", "type": "start", "timestamp": " ".join(data[0:2])})
@@ -1111,7 +1117,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                             server_data.mods = int(mods)
                     elif "Assigned ID " in line and " to " in line:
                         for i, word in enumerate(data):
-                            if data[i - 1] == "ID":
+                            if i >= 1 and data[i - 1] == "ID":
                                 try:
                                     int(word)
                                 except ValueError:
@@ -1122,7 +1128,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                                     break
                     elif " is now synced!" in line:
                         for i, word in enumerate(data):
-                            if data[i + 1] == "is":
+                            if len(data) > i - 1 and data[i + 1] == "is":
                                 server_data.persistent_data.logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
                                 break
                     elif " Connection Terminated" in line:
@@ -1150,7 +1156,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                         message = " ".join(data[5:])
                     server_data.persistent_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
                 else:
-                    print(f"Invalid log type {data[2]}")
+                    logger.warning(f"Invalid log type {data[2]}")
             elif "::" in data[0]:
                 if "General::" in data[0]:
                     setting = data[0].split("::")[-1]
@@ -1167,7 +1173,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                 elif "Misc::" in data[0]:
                     continue
                 else:
-                    print(f"Invalid setting type {data[0]}")
+                    logger.warning(f"Invalid setting type {data[0]}")
             elif data[0] == ">":
                 continue
             elif data[0] == "Mods" and data[1] == "reloaded.":
@@ -1181,41 +1187,45 @@ async def process_new_lines(new_lines: list[str]) -> None:
             elif (data[0] == "Kicked" and data[1] == "player") or "Error: No player with name matching" in line:
                 continue
             else:
-                print("Invalid line format!")
+                logger.warning("Invalid line format!")
     return
 
 async def monitor_logs() -> None:
     """
     Monitor the Server.log file and process any new lines.
     """
-    old_lines = []
-
+    global log_file_position
     while True:
         await asyncio.sleep(0.5)
         if server_data.process is not None and server_data.process.returncode is None:
-            async with aiofiles.open("Server.log") as file:
-                output = await file.read()
+            try:
+                async with aiofiles.open("Server.log") as file:
+                    await file.seek(log_file_position)
+                    output = await file.read()
+                    log_file_position = await file.tell()
+            except OSError as e:
+                logger.exception("Could not open and read from Server.log")
+                raise e
 
-            # Save old data and settings to compare with afterwards
-            old_data_json = server_data.model_dump_json() # We must dump the ServerData model first to avoid trying to copy a Process object, which will hang
-            old_data = ServerData.model_validate_json(old_data_json)
-            old_data.persistent_data = server_data.persistent_data.model_copy(deep=True)
-            old_settings = server_settings.model_copy(deep=True)
+            async with state_lock:
+                # Save old data and settings to compare with afterwards
+                old_data = snapshot_server_data()
+                old_settings = snapshot_settings()
 
-            new_lines = await check_lines(old_lines, output.splitlines())
-            old_lines = output.splitlines()
-            if len(new_lines) > 0:
-                await process_new_lines(new_lines)
+                new_lines = output.splitlines()
+                if len(new_lines) > 0:
+                    await process_new_lines(new_lines)
 
-                await server_data.persistent_data.trim_logs()
-                if configuration.persist_data:
-                    await server_data.persistent_data.dump_and_write()
+                    await server_data.persistent_data.trim_logs()
+                    if configuration.persist_data:
+                        await server_data.persistent_data.dump_and_write()
 
-                await send_changed_data(old_data, old_settings)
+                    await send_changed_data(old_data, old_settings)
 
-                print(f"Processed {len(new_lines)} new lines")
+                    logger.debug(f"Processed {len(new_lines)} new lines")
         elif server_data.process is not None:
-            reset_server_data()
+            async with state_lock:
+                reset_server_data()
 
 async def monitor_temp_files() -> None:
     """
@@ -1223,11 +1233,15 @@ async def monitor_temp_files() -> None:
     """
     while True:
         await asyncio.sleep(1)
-        for filename, data in temp_files.items():
-            if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now():
-                path = safe_join("Resources/Client.temp/", filename + ".part")
-                if await aioos.path.exists(path):
-                    await aioos.remove(path)
+        async with temp_files_lock:
+            expired_items = []
+            for filename, data in temp_files.items():
+                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now():
+                    path = safe_join("Resources/Client.temp/", filename + ".part")
+                    if await aioos.path.exists(path):
+                        await aioos.remove(path)
+                    expired_items.append(filename)
+            for filename in expired_items:
                 del temp_files[filename]
 
 @app.before_serving
