@@ -34,7 +34,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
      "url_base_path": "/beammp",
      "discord_oauth2_redirect_url": "",
      "virustotal_scanning": true,
-     "preserve_settings_changes": true,
+     "preserve_setting_changes": true,
      "persist_data": true,
      "maximum_log_entries": 500,
      "detect_mod_maps": true,
@@ -50,7 +50,7 @@ discord_oauth2_redirect_url - The public URL to the web manager's `/login/oauth2
 
 virustotal_scanning - Whether mod uploads should be checked by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
 
-preserve_settings_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
+preserve_setting_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
 
 persist_data - Whether data such as logs and level filepaths should save over restarts.
 
