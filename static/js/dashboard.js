@@ -1,10 +1,12 @@
 const homeButton = document.getElementById("homeButton");
 const modsButton = document.getElementById("modsButton");
 const logsButton = document.getElementById("logsButton");
+const configButton = document.getElementById("configButton");
 
 const homePage = document.getElementById("homePage");
 const modsPage = document.getElementById("modsPage");
 const logsPage = document.getElementById("logsPage");
+const configPage = document.getElementById("configPage");
 
 const errorToast = document.getElementById("errorToast");
 const infoToast = document.getElementById("infoToast");
@@ -17,6 +19,7 @@ const messageModal = document.getElementById("messageModal");
 const deleteModal = document.getElementById("deleteModal");
 const restartModal = document.getElementById("restartModal");
 const reloadModal = document.getElementById("reloadModal");
+const updateModal = document.getElementById("updateModal");
 const settingModal = document.getElementById("settingModal");
 
 const uploadModalButton = document.getElementById("uploadModalButton");
@@ -38,6 +41,7 @@ const enabledMods = document.querySelector("#enabledMods");
 const disabledMods = document.querySelector("#disabledMods");
 const playerLogs = document.querySelector("#playerLogs");
 const chatLogs = document.querySelector("#chatLogs");
+const serverVersion = document.querySelector("#serverVersion");
 
 let server_data = {};
 let server_settings = {};
@@ -51,6 +55,7 @@ const messageModalBS = bootstrap.Modal.getOrCreateInstance(messageModal);
 const deleteModalBS = bootstrap.Modal.getOrCreateInstance(deleteModal);
 const restartModalBS = bootstrap.Modal.getOrCreateInstance(restartModal);
 const reloadModalBS = bootstrap.Modal.getOrCreateInstance(reloadModal);
+const updateModalBS = bootstrap.Modal.getOrCreateInstance(updateModal);
 const settingModalBS = bootstrap.Modal.getOrCreateInstance(settingModal);
 
 const enabledModsTooltip = new bootstrap.Tooltip(enabledModsLabel);
@@ -153,16 +158,19 @@ function showReloadModal() {
     if (!kickModal.ariaHidden) {
         kickModalBS.hide();
     }
-    if (!messageModalBS.ariaHidden) {
+    if (!messageModal.ariaHidden) {
         messageModalBS.hide();
     }
-    if (!deleteModalBS.ariaHidden) {
+    if (!deleteModal.ariaHidden) {
         deleteModalBS.hide();
     }
-    if (!restartModalBS.ariaHidden) {
+    if (!restartModal.ariaHidden) {
         restartModalBS.hide();
     }
-    if (!settingModalBS.ariaHidden) {
+    if (!updateModal.ariaHidden) {
+        updateModalBS.hide();
+    }
+    if (!settingModal.ariaHidden) {
         settingModalBS.hide();
     }
     reloadModalBS.show();
@@ -336,6 +344,14 @@ function showSettingModal() {
     }
 
     settingModalBS.show();
+}
+
+function showUpdateModal() {
+    let modalTitle = document.getElementById("updateModalLabel");
+    let modalContent = document.getElementById("updateModalContent");
+    refreshUpdateModal(modalTitle, modalContent);
+
+    updateModalBS.show();
 }
 
 function formatBytes(bytes) {
@@ -531,6 +547,38 @@ function createLogDiv(content, timestamp = null, tooltipContent = null, logType 
     return log;
 }
 
+function createUpdateDiv(file) {
+    let update = document.createElement("div");
+    update.className = "d-flex justify-content-between";
+
+    let heading = document.createElement("h6");
+    heading.className = "text-truncate"
+    heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;"
+    heading.innerHTML = "OS: " + file["platform"] + ", Arch: " + file["architecture"];
+    heading.setAttribute("data-bs-toggle", "tooltip");
+    let size = formatBytes(file["size"]);
+    heading.setAttribute("data-bs-title", "BeamMP-Server." + file["platform"] + "." + file["architecture"] + " (" + size + ")");
+    new bootstrap.Tooltip(heading);
+    update.appendChild(heading);
+
+    let div = document.createElement("div");
+    div.style = "flex-shrink: 0;"
+    update.appendChild(div);
+
+    let aButton = document.createElement("a");
+    aButton.id = file["platform"] + "." + file["architecture"] + "-update";
+    aButton.href = "#";
+    div.appendChild(aButton);
+
+    let button = document.createElement("button");
+    button.type = "button";
+    button.className = "btn enable-button";
+    button.innerHTML = "Update";
+    aButton.appendChild(button);
+
+    return update;
+}
+
 function refreshMods(mods) {
     // Remove old mods
     let enabledLength = enabledMods.children.length;
@@ -671,6 +719,44 @@ function refreshMapDropdown(map_input, map_label, map_button2, map_dropdown2) {
     }
 }
 
+function refreshUpdateModal(modalTitle, modalContent, update = null) {
+    // Remove old update files
+    let updateLength = modalContent.children.length;
+    for (let i = 0; i < updateLength; i++) {
+        modalContent.children[0].remove();
+    }
+
+    if (update === null) {
+        modalTitle.innerHTML = "Checking for Update";
+        modalContent.innerHTML = "Please wait...";
+    } else if (server_data["version"] == update["version"]) {
+        modalTitle.innerHTML = "No Update Available";
+        modalContent.innerHTML = "Server up-to-date!";
+    } else {
+        if (server_data["version"] == null) {
+            modalTitle.innerHTML = "Unable to fetch current server version. (Latest: " + update["version"] + ")";
+        } else {
+            modalTitle.innerHTML = "Update Available! (" + server_data["version"] + " -> " + update["version"] + ")";
+        }
+        modalContent.innerHTML = "Select the update that matches your system below:";
+    
+        // Add files
+        let files = update["files"]
+        let fileLength = files.length;
+        for (let i = 0; i < fileLength; i++) {
+            let file = createUpdateDiv(files[i]);
+            file.style = "margin-top: 3%;";
+            modalContent.appendChild(file);
+            let updateButton = document.getElementById(files[i]["platform"] + "." + files[i]["architecture"] + "-update");
+            updateButton.addEventListener("click", () => {
+                connection.send(JSON.stringify({"type": "update", "action": "update", "download_url": files[i]["download_url"]}));
+                showToast("info", "Starting server update.");
+                updateModalBS.hide();
+            })
+        }
+    }
+}
+
 // Process server messages
 connection.addEventListener("message", (event) => {
     let data = JSON.parse(event.data);
@@ -693,6 +779,11 @@ connection.addEventListener("message", (event) => {
             } else if (data["action"] == "delete") {
                 showToast("info", "Mod deleted.");
                 connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
+            } else if ((data["action"] == "enable" || data["action"] == "disable") && server_data["error"]) {
+                // If the server is in an error state, server_data.mods will never change and a mod_list request will never be sent, so we send one here
+                connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
+            } else if (data["action"] == "update") {
+                showToast("info", "Server update complete.");
             }
         } else {
             if (data["type"] && data["type"] == "settings") {
@@ -707,6 +798,10 @@ connection.addEventListener("message", (event) => {
                 for (let key in data) {
                     if (key == "mod_list") {
                         refreshMods(data["mod_list"]);
+                    } else if (key == "update") {
+                        let modalTitle = document.getElementById("updateModalLabel");
+                        let modalContent = document.getElementById("updateModalContent");
+                        refreshUpdateModal(modalTitle, modalContent, data[key]);
                     } else if (key != "success") {
                         server_data[key] = data[key];
 
@@ -744,6 +839,14 @@ connection.addEventListener("message", (event) => {
                             // Update server connection text
                             serverStatus.innerHTML = "Server Error";
                             serverStatus.style = "color: #FF0000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+                        } else if (key == "version") {
+                            let version;
+                            if (server_data["version"] == null) {
+                                version = "N/A";
+                            } else {
+                                version = server_data["version"];
+                            }
+                            serverVersion.firstChild.textContent = "BeamMP " +  version;
                         }
                     }
                 }
@@ -929,6 +1032,11 @@ document.getElementById("settingButton").addEventListener("click", () => {
     showSettingModal();
 });
 
+document.getElementById("updateButton").addEventListener("click", () => {
+    connection.send(JSON.stringify({"type": "update", "action": "get"}));
+    showUpdateModal();
+});
+
 document.getElementById("settingModalButton").addEventListener("click", (event) => {
     event.preventDefault();
     settingModalBS.hide();
@@ -970,6 +1078,9 @@ homeButton.addEventListener("click", () => {
     logsPage.hidden = true;
     logsPage.ariaHidden = true;
     logsButton.children[0].classList.remove("page-selected");
+    configPage.hidden = true;
+    configPage.ariaHidden = true;
+    configButton.children[0].classList.remove("page-selected");
 
     refreshPlayers(server_data["players"]);
 });
@@ -984,6 +1095,9 @@ modsButton.addEventListener("click", () => {
     logsPage.hidden = true;
     logsPage.ariaHidden = true;
     logsButton.children[0].classList.remove("page-selected");
+    configPage.hidden = true;
+    configPage.ariaHidden = true;
+    configButton.children[0].classList.remove("page-selected");
 
     connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
 });
@@ -998,6 +1112,24 @@ logsButton.addEventListener("click", () => {
     logsPage.hidden = false;
     logsPage.ariaHidden = false;
     logsButton.children[0].classList.add("page-selected");
+    configPage.hidden = true;
+    configPage.ariaHidden = true;
+    configButton.children[0].classList.remove("page-selected");
 
     refreshLogs(server_data["logs"]);
+});
+
+configButton.addEventListener("click", () => {
+    homePage.hidden = true;
+    homePage.ariaHidden = true;
+    homeButton.children[0].classList.remove("page-selected");
+    modsPage.hidden = true;
+    modsPage.ariaHidden = true;
+    modsButton.children[0].classList.remove("page-selected");
+    logsPage.hidden = true;
+    logsPage.ariaHidden = true;
+    logsButton.children[0].classList.remove("page-selected");
+    configPage.hidden = false;
+    configPage.ariaHidden = false;
+    configButton.children[0].classList.add("page-selected");
 });
