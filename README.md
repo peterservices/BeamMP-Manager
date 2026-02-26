@@ -85,6 +85,7 @@ authorized_users - A list of Discord user IDs of the users who should be able to
   * Log chat messages
   * Logs save across server restarts
 * And More
+  * Update server binary
   * Restart server
   * Manually reload mods
   * Send chat messages as the server
@@ -95,7 +96,6 @@ authorized_users - A list of Discord user IDs of the users who should be able to
 * More methods of authentication (Google)
 * Permission levels
 * Option to not automatically start the server (Maybe a process-detached read-only mode?)
-* Update server binary
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
