@@ -23,7 +23,42 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 * Copy the contents of `.env.example` and create a file named `.env`
   * Add your Discord App's client ID and client secret, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
 * Run the web server in the terminal with `.venv/bin/python -m hypercorn --bind 0.0.0.0:30815 main.py` (Replace 30815 with whatever port you prefer that is port-forwarded)
-  * Edit the `config.json`
+  * Edit the `config.json` (See [configuring](#configuring))
+
+### **Features**
+
+* Public Dashboard (No login necessary)
+  * View and download mods
+  * Can be turned off if desired
+* Mod Management
+  * View and download mods
+  * Upload mods
+  * Disable mods
+  * Delete mods
+* Player Management
+  * View online players
+  * Kick players
+* Manage server settings
+  * View and change server settings
+  * Automatically detect maps in mods you upload
+  * Autofilled options to change the map setting to
+* Logging
+  * Log player joins and leaves
+  * Log when players finish downloading mods from the server
+  * Log chat messages
+  * Logs save across server restarts
+* And More
+  * Update server binary
+  * Restart server
+  * Manually reload mods
+  * Send chat messages as the server
+
+### **Planned Features**
+
+* Enhanced event logging (Server start/stop, dashboard logins, etc.)
+* More methods of authentication (Google)
+* Permission levels
+* Option to not automatically start the server (Maybe a process-detached read-only mode?)
  
 ### **Configuring**
 
@@ -61,41 +96,6 @@ detect_mod_maps - Whether uploaded mods are scanned for modded levels. If found,
 public_dashboard - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
 
 authorized_users - A list of Discord user IDs of the users who should be able to login to the web manager.
-
-### **Features**
-
-* Public Dashboard (No login necessary)
-  * View and download mods
-  * Can be turned off if desired
-* Mod Management
-  * View and download mods
-  * Upload mods
-  * Disable mods
-  * Delete mods
-* Player Management
-  * View online players
-  * Kick players
-* Manage server settings
-  * View and change server settings
-  * Automatically detect maps in mods you upload
-  * Autofilled options to change the map setting to
-* Logging
-  * Log player joins and leaves
-  * Log when players finish downloading mods from the server
-  * Log chat messages
-  * Logs save across server restarts
-* And More
-  * Update server binary
-  * Restart server
-  * Manually reload mods
-  * Send chat messages as the server
-
-### **Planned Features**
-
-* Enhanced event logging (Server start/stop, dashboard logins, etc.)
-* More methods of authentication (Google)
-* Permission levels
-* Option to not automatically start the server (Maybe a process-detached read-only mode?)
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
