@@ -110,15 +110,89 @@ button.styled-triple-button:active ~ div.styled-triple-button-accent-right {
     border-bottom-style: solid !important;
 }
 
-button.page-selected {
-    color: #000000 !important;
+button.page-selected ~ div.styled-triple-button-accent-right {
     border-bottom-width: 4px !important;
     border-bottom-color: #FF6700 !important;
     border-bottom-style: solid !important;
     background-color: #c2d3de !important;
 }
 
-button.page-selected ~ div.styled-triple-button-accent-right {
+/* Quad Buttons */
+
+div.styled-quad-button-accent-left {
+    clip-path: polygon(5% 0%, 100% 0%, 95% 100%, 0% 100%);
+    background-color: #FF6700;
+    width: 50%;
+    height: 100%;
+}
+
+div.styled-quad-button-accent-right {
+    clip-path: polygon(5% 0%, 100% 0%, 95% 100%, 0% 100%);
+    background-color: #c2d3de;
+    width: 50%;
+    height: 100%;
+}
+
+div.styled-quad-button-container {
+    clip-path: polygon(2.5% 0%, 100% 0%, 97.5% 100%, 0% 100%);
+    width: 40%;
+    height: 30%;
+}
+
+button.styled-quad-button {
+    color: #000000;
+    clip-path: polygon(9.2% 0%, 100% 0%, 90.8% 100%, 0% 100%);
+    padding-left: 5%;
+    padding-right: 5%;
+    width: 26.6%;
+    height: 100%;
+    background-color: #f2f4f6;
+    border-radius: 0%;
+    z-index: 10;
+    border-style: none;
+}
+
+button.styled-quad-button:hover {
+    color: #FFFFFF;
+    background-color: #FF6700;
+}
+
+button.styled-quad-button:hover ~ div.styled-quad-button-accent-right {
+    background-color: #FF6700;
+}
+
+button.styled-quad-button:active {
+    color: #000000 !important;
+    background-color: #c2d3de !important;
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+}
+
+button.styled-quad-button:active ~ div.styled-quad-button-accent-right {
+    background-color: #c2d3de;
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+}
+
+button.page-selected ~ div.styled-quad-button-accent-right {
+    border-bottom-width: 4px !important;
+    border-bottom-color: #FF6700 !important;
+    border-bottom-style: solid !important;
+    background-color: #c2d3de !important;
+}
+
+.start-38 {
+    left: 37.9% !important;
+}
+
+.end-25 {
+    right: 24.8% !important;
+}
+
+button.page-selected {
+    color: #000000 !important;
     border-bottom-width: 4px !important;
     border-bottom-color: #FF6700 !important;
     border-bottom-style: solid !important;
