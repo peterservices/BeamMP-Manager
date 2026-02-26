@@ -17,24 +17,29 @@
                     BeamMP Manager
                 </span>
                 <!-- Page Buttons -->
-                <div class="container position-absolute top-50 start-50 translate-middle styled-triple-button-container" style="min-height: 40px;">
+                <div class="container position-absolute top-50 start-50 translate-middle styled-quad-button-container" style="min-height: 40px;">
                     <a id="homeButton" href="#" role="button">
-                        <button type="button" class="btn position-absolute start-0 top-50 translate-middle-y styled-triple-button page-selected" style="margin-left: 0.9%; margin-right: 0%;">
+                        <button type="button" class="btn position-absolute start-0 top-50 translate-middle-y styled-quad-button page-selected" style="margin-left: 0.75%; margin-right: 0%;">
                             Home
                         </button>
                     </a>
                     <a id="modsButton" href="#" role="button">
-                        <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-triple-button">
+                        <button type="button" class="btn position-absolute start-38 top-50 translate-middle styled-quad-button">
                             Mods
                         </button>
                     </a>
                     <a id="logsButton" href="#" role="button">
-                        <button type="button" class="btn position-absolute end-0 top-50 translate-middle-y styled-triple-button" style="margin-right: 0.9%; margin-left: 0%;">
+                        <button type="button" class="btn position-absolute end-25 top-50 translate-middle-y styled-quad-button">
                             Logs
                         </button>
-                        <div class="container position-absolute top-50 end-0 translate-middle-y styled-triple-button-accent-right"></div>
                     </a>
-                    <div class="container position-absolute top-50 start-0 translate-middle-y styled-triple-button-accent-left"></div>
+                    <a id="configButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute end-0 top-50 translate-middle-y styled-quad-button" style="margin-right: 0.75%; margin-left: 0%;">
+                            Config
+                        </button>
+                        <div class="container position-absolute top-50 end-0 translate-middle-y styled-quad-button-accent-right"></div>
+                    </a>
+                    <div class="container position-absolute top-50 start-0 translate-middle-y styled-quad-button-accent-left"></div>
                 </div>
                 <!-- Logout Button -->
                 <div class="container position-absolute top-50 end-0 translate-middle-y styled-single-button-container" style="min-height: 40px; margin-right: 1%; margin-left: 0%;">
@@ -142,6 +147,23 @@
                     Clear Logs
                 </button>
             </a>
+        </div>
+        <div id="configPage" style="margin-top: 5%;" hidden aria-hidden="true">
+            <div class="container px-4">
+                <div class="row gx-5">
+                    <div class="col-6">
+                        <h3 id="serverVersion" class="d-flex justify-content-between" style="background-color: #f3f3f3; border-radius: 50px; padding: 10px; padding-left: 25px;">
+                            Loading
+                            <button id="updateButton" type="button" class="btn btn-orange">Check For Update</button>
+                        </h3>
+                    </div>
+                    <div class="col-6">
+                        <div>
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="container position-absolute top-50 start-50 translate-middle styled-single-button-container" style="min-height: 40px;" hidden="true">
@@ -322,6 +344,20 @@
                         <a href="">
                             <button id="reloadButton" type="button" class="btn btn-orange">Reload</button>
                         </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade" id="updateModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1" aria-labelledby="updateServerModal" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h1 class="modal-title fs-5" id="updateModalLabel"></h1>
+                    </div>
+                    <div class="modal-body" id="updateModalContent">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="border-style: none;">Close</button>
                     </div>
                 </div>
             </div>
