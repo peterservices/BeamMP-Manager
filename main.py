@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import signal
+import stat
 import zipfile
 from collections.abc import AsyncGenerator
 from functools import wraps
@@ -16,6 +17,7 @@ from typing import Annotated, Any, Literal, Self
 
 import aiofiles
 import aiofiles.os as aioos
+import aiohttp
 import discordoauth2
 import tomlkit
 import vt
@@ -247,6 +249,20 @@ class TempFile(BaseModel):
     complete: bool = False
     last_write: datetime.datetime | None = None
 
+class ReleaseFile(BaseModel):
+    platform: str
+    architecture: Literal["arm64", "x86_64", "exe"]
+    download_url: str
+    size: int
+
+class ReleaseCache(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    lock: asyncio.Lock = Field(default_factory=asyncio.Lock, exclude=True)
+    last_cache: datetime.datetime | None = Field(default=None, exclude=True)
+    version: str | None = None
+    files: list[ReleaseFile] = []
+
 class Broker:
     def __init__(self: Self) -> None:
         self.connections: set[asyncio.Queue] = set()
@@ -297,7 +313,7 @@ if configuration.persist_data:
         with open("persistent_data.json") as file:
             persistent_str = file.read()
         persistent_dict = json.loads(persistent_str)
-        persistent_dict["lock"] = asyncio.Lock()
+        persistent_dict["lock"] = persistent_data.lock
         persistent_data = PersistentData.model_validate(persistent_dict)
 
         # Save any new changes to disk
@@ -311,7 +327,9 @@ oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, red
 
 server_data = ServerData(persistent_data=persistent_data)
 server_settings = ServerSettings()
+release_cache: ReleaseCache = ReleaseCache()
 state_lock: asyncio.Lock = asyncio.Lock()
+server_executable_lock: asyncio.Lock = asyncio.Lock()
 broker = Broker()
 websockets: list[asyncio.Task] = []
 temp_files: dict[str, TempFile] = {}
@@ -387,6 +405,31 @@ async def verify_persistent_fields() -> None:
                 await server_data.persistent_data.dump_and_write()
             await send_changed_data(old_data)
 
+async def update_release_cache() -> bool:
+    """
+    Fetches the latest release information from GitHub and updates the cache. Returns whether the update was successful.
+    """
+    async with aiohttp.ClientSession() as session:
+        async with session.get("https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest") as response:
+            if response.status < 200 or response.status >= 300:
+                return False
+            response_json: dict[str, Any] = await response.json()
+    if "tag_name" not in response_json or "assets" not in response_json:
+        return False
+    release_cache.files.clear()
+    release_cache.version = response_json["tag_name"]
+    for asset in response_json["assets"]:
+        if "name" not in asset or "size" not in asset or "browser_download_url" not in asset:
+            continue
+        name = asset["name"].split(".")
+        if name[0] != "BeamMP-Server":
+            continue
+        platform = "windows" if "exe" in name else ".".join(name[1:-1])
+        architecture = name[-1]
+        file = ReleaseFile(platform=platform, architecture=architecture, download_url=asset["browser_download_url"], size=asset["size"])
+        release_cache.files.append(file)
+    return True
+
 async def start_server() -> None:
     """
     Start the BeamMP Server.
@@ -406,7 +449,11 @@ async def start_server() -> None:
     reset_server_data()
     await send_changed_data(old_data)
     if await aioos.path.exists(configuration.beammp_executable_path):
-        server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
+        try:
+            server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
+        except (PermissionError, OSError):
+            server_data.error = True
+            logger.exception("Failed to start BeamMP server")
 
 async def write_config() -> None:
     """
@@ -845,6 +892,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 return None
             match ws_request["command"]:
                 case "restart":
+                    if server_executable_lock.locked():
+                        return {"action": "restart", "success": False}
                     if server_data.process is not None and server_data.process.returncode is None:
                         server_data.process.terminate()
                     await start_server()
@@ -918,7 +967,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             # Reload mods to update mods list
             await run_command("reloadmods")
 
-            return {"success": True, "action": "enable"}
+            return {"action": "enable"}
         case "disable":
             if "disable" not in ws_request:
                 return None
@@ -952,7 +1001,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         await server_data.persistent_data.dump_and_write()
                     await send_changed_data(old_data)
 
-            return {"success": True, "action": "disable"}
+            return {"action": "disable"}
         case "delete":
             if "delete" not in ws_request:
                 return None
@@ -989,7 +1038,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                             if await server_data.persistent_data.remove_level_hash(mod_hash) and configuration.persist_data:
                                 await server_data.persistent_data.dump_and_write()
                             await send_changed_data(old_data)
-            return {"success": True, "action": "delete"}
+            return {"action": "delete"}
         case "get":
             if "setting" not in ws_request:
                 return None
@@ -1031,8 +1080,56 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         if configuration.persist_data:
                             await server_data.persistent_data.dump_and_write()
                         await send_changed_data(old_data)
-                    return {"action": "clear", "success": True}
+                    return {"action": "clear"}
             return {"action": "clear", "success": False}
+        case "update":
+            if "action" not in ws_request:
+                return None
+            match ws_request["action"]:
+                case "get":
+                    async with release_cache.lock:
+                        if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
+                            updated = await update_release_cache()
+                            if not updated:
+                                return None
+                        return {"update": release_cache.model_dump()}
+                case "update":
+                    if "download_url" not in ws_request:
+                        return None
+                    async with release_cache.lock:
+                        if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
+                            updated = await update_release_cache()
+                            if not updated:
+                                return None
+                    for file in release_cache.files:
+                        if file.download_url == ws_request["download_url"]:
+                            filepath = configuration.beammp_executable_path + ".updated"
+                            if await aioos.path.exists(filepath): # Make sure the temporary update file doesn't already exist
+                                return {"action": "update", "success": False}
+
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(file.download_url) as response:
+                                    async with aiofiles.open(filepath, "wb") as file:
+                                        async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
+                                            await file.write(chunk)
+                            async with server_executable_lock:
+                                if server_data.process is not None and server_data.process.returncode is None:
+                                    server_data.process.terminate()
+                                if await aioos.path.exists(configuration.beammp_executable_path):
+                                    try:
+                                        await aioos.remove(configuration.beammp_executable_path)
+                                    except (PermissionError, OSError):
+                                        logger.exception("Failed to delete server executable")
+                                        await aioos.remove(filepath)
+                                        return {"action": "update", "success": False}
+
+                                await aioos.rename(filepath, configuration.beammp_executable_path)
+                                st = await aioos.stat(configuration.beammp_executable_path)
+                                await asyncio.to_thread(os.chmod, configuration.beammp_executable_path, st.st_mode | stat.S_IEXEC) # Set the file as executable for the current user
+
+                                await start_server()
+                            return {"action": "update"}
+                    return {"action": "update", "success": False}
         case "ping":
             return True
     return None
@@ -1224,8 +1321,12 @@ async def monitor_logs() -> None:
 
                     logger.debug(f"Processed {len(new_lines)} new lines")
         elif server_data.process is not None:
+            logger.error("BeamMP server exited with returncode %s", server_data.process.returncode)
+            old_data = snapshot_server_data()
             async with state_lock:
                 reset_server_data()
+            server_data.error = True
+            await send_changed_data(old_data)
 
 async def monitor_temp_files() -> None:
     """
