@@ -77,17 +77,17 @@ A configurable web-based manager for your BeamMP server using Discord as authent
      "authorized_users": []
 }
 ```
-beammp_executable_path - The path to your BeamMP Server executable. This should be located within the same directory.
+beammp_executable_path - The path to your BeamMP Server executable. This should be located within the same directory as main.py.
 
-url_base_path - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL.
+url_base_path - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just set this to `/`.
 
 discord_oauth2_redirect_url - The public URL to the web manager's `/login/oauth2` page. This URL must be added on the Discord Developer Portal under OAuth2.
 
-virustotal_scanning - Whether mod uploads should be checked by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
+virustotal_scanning - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
 
-preserve_setting_changes - Whether setting changes should be saved to the ServerConfig.toml file. Otherwise, changes will be cleared after a server restart.
+preserve_setting_changes - Whether setting changes should be saved to the ServerConfig.toml file. If not, setting changes will be cleared after a BeamMP server restart.
 
-persist_data - Whether data such as logs and level filepaths should save over restarts.
+persist_data - Whether data such as logs and detected level filepaths should persist across manager restarts.
 
 maximum_log_entries - The maximum number of total log entries that will be stored. This is useful to limit the file size of the persistent data file.
 
@@ -95,7 +95,7 @@ detect_mod_maps - Whether uploaded mods are scanned for modded levels. If found,
 
 public_dashboard - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
 
-authorized_users - A list of Discord user IDs of the users who should be able to login to the web manager.
+authorized_users - A list of Discord user IDs who will be able to login to the web manager.
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
