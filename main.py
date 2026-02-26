@@ -405,7 +405,7 @@ async def start_server() -> None:
     reset_server_settings()
     reset_server_data()
     await send_changed_data(old_data)
-    if os.path.exists(configuration.beammp_executable_path):
+    if await aioos.path.exists(configuration.beammp_executable_path):
         server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
 
 async def write_config() -> None:
@@ -1009,7 +1009,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     await run_command(f"settings set General {ws_request["setting"]} {json.dumps(ws_request["value"])}")
 
                 # Save the setting change to disk so it is preserved after restart
-                if configuration.preserve_setting_changes and os.path.exists("ServerConfig.toml"):
+                if configuration.preserve_setting_changes and await aioos.path.exists("ServerConfig.toml"):
                     async with aiofiles.open("ServerConfig.toml") as file:
                         toml_str = await file.read()
                     toml = tomlkit.parse(toml_str)
