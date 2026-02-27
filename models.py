@@ -3,7 +3,7 @@ import datetime
 import hashlib
 import json
 from collections.abc import AsyncGenerator
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
 import aiofiles
 from pydantic import (
@@ -16,20 +16,26 @@ from pydantic import (
 )
 
 
+class AuthorizedDiscordUser(BaseModel):
+    """
+    A model representing a user authorized to access the dashboard.
+    """
+    permissions: list[Literal["modify_settings", "modify_mods", "manage_server", "clear_logs", "configure"]] = ["modify_settings", "modify_mods", "manage_server"]
+
 class LocalConfiguration(BaseModel):
     """
     A model representing the local configuration file.
     """
+    authorized_discord_users: dict[int, AuthorizedDiscordUser] = {}
     beammp_executable_path: str = "BeamMP-Server"
-    url_base_path: str = "/beammp"
-    discord_oauth2_redirect_url: str = ""
-    virustotal_scanning: bool = True
-    preserve_setting_changes: bool = True
-    persist_data: bool = True
-    maximum_log_entries: PositiveInt = 500
     detect_mod_maps: bool = True
+    discord_oauth2_redirect_url: str = ""
+    maximum_log_entries: PositiveInt = 500
+    persist_data: bool = True
+    preserve_setting_changes: bool = True
     public_dashboard: bool = True
-    authorized_users: list[int] = []
+    url_base_path: str = "/beammp"
+    virustotal_scanning: bool = True
 
 class PersistentData(BaseModel):
     """
@@ -140,6 +146,7 @@ class ServerData(BaseModel):
     persistent_data: PersistentData | None = Field(default=None, exclude=True)
     process: asyncio.subprocess.Process | None = Field(default=None, exclude=True)
     connected: bool = False
+    started: bool = False
     error: bool = False
     version: str | None = None
     lua_version: str | None = None
