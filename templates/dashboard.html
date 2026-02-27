@@ -17,23 +17,42 @@
                     BeamMP Manager
                 </span>
                 <!-- Page Buttons -->
-                <div class="container position-absolute top-50 start-50 translate-middle styled-quad-button-container" style="min-height: 40px;">
-                    <a id="homeButton" href="#" role="button">
+                <div id="triple-navbuttons" class="container position-absolute top-50 start-50 translate-middle styled-triple-button-container" style="min-height: 40px;" aria-hidden="true" aria-disabled="true" hidden inert>
+                    <a id="homeTripleButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute start-0 top-50 translate-middle-y styled-triple-button page-selected" style="margin-left: 0.9%; margin-right: 0%;">
+                            Home
+                        </button>
+                    </a>
+                    <a id="modsTripleButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute start-50 top-50 translate-middle styled-triple-button">
+                            Mods
+                        </button>
+                    </a>
+                    <a id="logsTripleButton" href="#" role="button">
+                        <button type="button" class="btn position-absolute end-0 top-50 translate-middle-y styled-triple-button" style="margin-right: 0.9%; margin-left: 0%;">
+                            Logs
+                        </button>
+                        <div class="container position-absolute top-50 end-0 translate-middle-y styled-triple-button-accent-right"></div>
+                    </a>
+                    <div class="container position-absolute top-50 start-0 translate-middle-y styled-triple-button-accent-left"></div>
+                </div>
+                <div id="quad-navbuttons" class="container position-absolute top-50 start-50 translate-middle styled-quad-button-container" style="min-height: 40px;">
+                    <a id="homeQuadButton" href="#" role="button">
                         <button type="button" class="btn position-absolute start-0 top-50 translate-middle-y styled-quad-button page-selected" style="margin-left: 0.75%; margin-right: 0%;">
                             Home
                         </button>
                     </a>
-                    <a id="modsButton" href="#" role="button">
+                    <a id="modsQuadButton" href="#" role="button">
                         <button type="button" class="btn position-absolute start-38 top-50 translate-middle styled-quad-button">
                             Mods
                         </button>
                     </a>
-                    <a id="logsButton" href="#" role="button">
+                    <a id="logsQuadButton" href="#" role="button">
                         <button type="button" class="btn position-absolute end-25 top-50 translate-middle-y styled-quad-button">
                             Logs
                         </button>
                     </a>
-                    <a id="configButton" href="#" role="button">
+                    <a id="configQuadButton" href="#" role="button">
                         <button type="button" class="btn position-absolute end-0 top-50 translate-middle-y styled-quad-button" style="margin-right: 0.75%; margin-left: 0%;">
                             Config
                         </button>
