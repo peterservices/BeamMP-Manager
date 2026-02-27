@@ -4,6 +4,7 @@ import datetime
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import signal
@@ -131,6 +132,14 @@ broker = Broker()
 websockets: list[asyncio.Task] = []
 log_file_position: int = 0
 
+uname_result = platform.uname()
+if uname_result.system.lower() == "windows":
+    architecture = "exe"
+elif uname_result.machine == "aarch64":
+    architecture = "aarch64 / arm64"
+else:
+    architecture = uname_result.machine
+
 async def run_command(command_str: str) -> None:
     """
     Send a command to the BeamMP server.
@@ -192,13 +201,12 @@ async def verify_persistent_fields() -> None:
     """
     Verify all the fields in persistent_data, and update the disk (if enabled) and websocket if changes were made.
     """
-    async with state_lock:
-        old_data = snapshot_server_data() # Save old data to compare with after verifying levels
-        levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
-        if levels or await server_data.persistent_data.trim_logs(configuration.maximum_log_entries):
-            if configuration.persist_data:
-                await server_data.persistent_data.dump_and_write()
-            await send_changed_data(old_data)
+    old_data = snapshot_server_data() # Save old data to compare with after verifying levels
+    levels = await server_data.persistent_data.verify_levels() if configuration.detect_mod_maps else False
+    if levels or await server_data.persistent_data.trim_logs(configuration.maximum_log_entries):
+        if configuration.persist_data:
+            await server_data.persistent_data.dump_and_write()
+        await send_changed_data(old_data)
 
 async def update_release_cache() -> bool:
     """
@@ -225,30 +233,39 @@ async def update_release_cache() -> bool:
         release_cache.files.append(file)
     return True
 
+def user_has_permissions(user: AuthUser, permissions: list) -> bool:
+    auth_id = int(user.auth_id)
+    for permission in permissions:
+        if permission not in configuration.authorized_discord_users.get(auth_id).permissions:
+            return False
+    return True
+
 async def start_server() -> None:
     """
     Start the BeamMP Server.
     """
     global log_file_position
-    old_data = snapshot_server_data()
-    try:
-        async with aiofiles.open("Server.log", "w") as file:
-            await file.writelines("")
-    except OSError as e:
-        logger.exception("Could not open and write to Server.log")
-        raise e
-    log_file_position = 0
-    if configuration.persist_data:
-        await verify_persistent_fields()
-    reset_server_settings()
-    reset_server_data()
-    await send_changed_data(old_data)
-    if await aioos.path.exists(configuration.beammp_executable_path):
+    async with state_lock:
+        old_data = snapshot_server_data()
         try:
-            server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
-        except (PermissionError, OSError):
-            server_data.error = True
-            logger.exception("Failed to start BeamMP server")
+            async with aiofiles.open("Server.log", "w") as file:
+                await file.writelines("")
+        except OSError as e:
+            logger.exception("Could not open and write to Server.log")
+            raise e
+        log_file_position = 0
+        if configuration.persist_data:
+            await verify_persistent_fields()
+        reset_server_settings()
+        reset_server_data()
+        if await aioos.path.exists(configuration.beammp_executable_path):
+            try:
+                server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
+                server_data.started = True
+            except (PermissionError, OSError):
+                server_data.error = True
+                logger.exception("Failed to start BeamMP server")
+        await send_changed_data(old_data)
 
 async def write_config() -> None:
     """
@@ -258,19 +275,23 @@ async def write_config() -> None:
     async with aiofiles.open("config.json", "w") as file:
         await file.write(to_write)
 
-def authorization_required(func):
+def authorization_required(required_permissions: list[str] = []):
     """
-    Ensures the user is logged in and is in the authorized_users list.
+    Ensures the user is logged in and is an authorized user.
     """
-    @wraps(func)
-    @login_required
-    async def wrapper(*args, **kwargs):
-        if int(current_user.auth_id) not in configuration.authorized_users:
-            raise Unauthorized()
+    def decorator(func):
+        @wraps(func)
+        @login_required
+        async def wrapper(*args, **kwargs):
+            if int(current_user.auth_id) not in configuration.authorized_discord_users:
+                raise Unauthorized()
 
-        return await current_app.ensure_async(func)(*args, **kwargs)
+            if not user_has_permissions(current_user, required_permissions):
+                return abort(403)
 
-    return wrapper
+            return await current_app.ensure_async(func)(*args, **kwargs)
+        return wrapper
+    return decorator
 
 # -- Website routes --
 
@@ -279,7 +300,7 @@ async def main_page():
     return redirect(f"{configuration.url_base_path}/dashboard")
 
 @app.route(f"{configuration.url_base_path}/dashboard")
-@authorization_required
+@authorization_required()
 async def dashboard():
     return await render_template("dashboard.html", base=configuration.url_base_path)
 
@@ -336,7 +357,7 @@ async def oauth_login():
     access = await oauth_client.exchange_code(code)
     identify = await access.fetch_identify()
     if "id" in identify:
-        if int(identify["id"]) in configuration.authorized_users:
+        if int(identify["id"]) in configuration.authorized_discord_users:
             auth = AuthUser(auth_id=identify["id"])
             login_user(auth, True)
             session.pop("error")
@@ -471,7 +492,7 @@ def detect_zip_levels(path) -> str | None:
     return filename
 
 @app.route(f"{configuration.url_base_path}/upload", methods=["POST"])
-@authorization_required
+@authorization_required(["modify_mods"])
 async def upload():
     content_range = request.headers.get("Content-Range")
     form = await request.form
@@ -683,14 +704,22 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 case "levels":
                     return {"levels": server_data.levels}
                 case "update":
+                    if not user_has_permissions(current_user, ["configure"]):
+                        return None
                     async with release_cache.lock:
                         if release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now():
                             updated = await update_release_cache()
                             if not updated:
                                 return None
-                    return {"update": release_cache.model_dump()}
+                        release = release_cache.model_dump()
+                        release["system_architecture"] = architecture
+                    return {"update": release}
+                case "permissions":
+                    return {"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions}
         case "command":
             if "command" not in ws_request:
+                return None
+            if not user_has_permissions(current_user, ["manage_server"]):
                 return None
             match ws_request["command"]:
                 case "restart":
@@ -725,6 +754,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         return {"action": "reloadmods"}
         case "enable":
             if "enable" not in ws_request:
+                return None
+            if not user_has_permissions(current_user, ["modify_mods"]):
                 return None
             path = safe_join("Resources/Client.disabled/", ws_request["enable"])
             if path is None or not await aioos.path.exists(path):
@@ -773,6 +804,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
         case "disable":
             if "disable" not in ws_request:
                 return None
+            if not user_has_permissions(current_user, ["modify_mods"]):
+                return None
             path = safe_join("Resources/Client/", ws_request["disable"])
             if path is None or not await aioos.path.exists(path):
                 return {"action": "disable", "success": False}
@@ -806,6 +839,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             return {"action": "disable"}
         case "delete":
             if "delete" not in ws_request:
+                return None
+            if not user_has_permissions(current_user, ["modify_mods"]):
                 return None
             disabled = False
             path = safe_join("Resources/Client/", ws_request["delete"])
@@ -852,6 +887,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
         case "set":
             if "setting" not in ws_request or "value" not in ws_request:
                 return None
+            if not user_has_permissions(current_user, ["modify_settings"]):
+                return None
             if hasattr(server_settings, ws_request["setting"]):
                 expected_value = getattr(server_settings, ws_request["setting"])
                 if not isinstance(ws_request["value"], type(expected_value)):
@@ -876,6 +913,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 return None
             match ws_request["data"]:
                 case "logs":
+                    if not user_has_permissions(current_user, ["clear_logs"]):
+                        return None
                     async with state_lock:
                         old_data = snapshot_server_data()
                         server_data.persistent_data.logs.clear()
@@ -886,6 +925,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             return {"action": "clear", "success": False}
         case "update":
             if "download_url" not in ws_request:
+                return None
+            if not user_has_permissions(current_user, ["configure"]):
                 return None
             async with release_cache.lock:
                 if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
@@ -941,7 +982,7 @@ async def receive() -> None:
         await websocket.send(json.dumps(result))
 
 @app.websocket(f"{configuration.url_base_path}/ws")
-@authorization_required
+@authorization_required()
 async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
