@@ -1,7 +1,10 @@
-const homeButton = document.getElementById("homeButton");
-const modsButton = document.getElementById("modsButton");
-const logsButton = document.getElementById("logsButton");
-const configButton = document.getElementById("configButton");
+const homeTripleButton = document.getElementById("homeTripleButton");
+const modsTripleButton = document.getElementById("modsTripleButton");
+const logsTripleButton = document.getElementById("logsTripleButton");
+const homeQuadButton = document.getElementById("homeQuadButton");
+const modsQuadButton = document.getElementById("modsQuadButton");
+const logsQuadButton = document.getElementById("logsQuadButton");
+const configQuadButton = document.getElementById("configQuadButton");
 
 const homePage = document.getElementById("homePage");
 const modsPage = document.getElementById("modsPage");
@@ -71,6 +74,11 @@ let connected = false;
 const pingServer = setInterval(() => {
     connection.send(JSON.stringify({"type": "ping"}));
 }, 60000);
+
+// Request user permissions when the websocket is ready
+connection.onopen = () => {
+    connection.send(JSON.stringify({"type": "request", "request": "permissions"}));
+}
 
 function showToast(type, text) {
     // Select the type of toast to copy
@@ -432,40 +440,45 @@ function createModDiv(type, modName, filesize) {
     path2.setAttributeNS(null, "d", "M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z");
     image.appendChild(path2);
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
-    button.innerHTML = ((type == "enabled") ? "Disable" : "Enable");
-    aButton.appendChild(button);
+    // If the user doesn't have permission to modify mods, don't show enable and disable buttons
+    if (server_data["permissions"] && server_data["permissions"].includes("modify_mods")) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
+        button.innerHTML = ((type == "enabled") ? "Disable" : "Enable");
+        aButton.appendChild(button);
 
-    if (type == "disabled") {
-        div.appendChild(document.createTextNode(" "));
+        if (type == "disabled") {
+            div.appendChild(document.createTextNode(" "));
 
-        const aDeleteButton = document.createElement("a");
-        aDeleteButton.id = modName + "-delete-button";
-        aDeleteButton.href = "#";
-        div.appendChild(aDeleteButton);
+            const aDeleteButton = document.createElement("a");
+            aDeleteButton.id = modName + "-delete-button";
+            aDeleteButton.href = "#";
+            div.appendChild(aDeleteButton);
 
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "btn delete-button";
-        aDeleteButton.appendChild(deleteButton);
+            const deleteButton = document.createElement("button");
+            deleteButton.type = "button";
+            deleteButton.className = "btn delete-button";
+            aDeleteButton.appendChild(deleteButton);
 
-        const deleteImage = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        deleteImage.setAttribute("width", "16");
-        deleteImage.setAttribute("height", "16");
-        deleteImage.setAttribute("fill", "currentColor");
-        deleteImage.classList.add("bi", "bi-download");
-        deleteImage.setAttribute("viewBox", "0 0 16 16");
-        deleteButton.appendChild(deleteImage);
+            const deleteImage = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+            deleteImage.setAttribute("width", "16");
+            deleteImage.setAttribute("height", "16");
+            deleteImage.setAttribute("fill", "currentColor");
+            deleteImage.classList.add("bi", "bi-download");
+            deleteImage.setAttribute("viewBox", "0 0 16 16");
+            deleteButton.appendChild(deleteImage);
 
-        const deletePath1 = document.createElementNS(deleteImage.namespaceURI, "path");
-        deletePath1.setAttributeNS(null, "d", "M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z");
-        deleteImage.appendChild(deletePath1);
+            const deletePath1 = document.createElementNS(deleteImage.namespaceURI, "path");
+            deletePath1.setAttributeNS(null, "d", "M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z");
+            deleteImage.appendChild(deletePath1);
 
-        const deletePath2 = document.createElementNS(deleteImage.namespaceURI, "path");
-        deletePath2.setAttributeNS(null, "d", "M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z");
-        deleteImage.appendChild(deletePath2);
+            const deletePath2 = document.createElementNS(deleteImage.namespaceURI, "path");
+            deletePath2.setAttributeNS(null, "d", "M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z");
+            deleteImage.appendChild(deletePath2);
+        }
+    } else {
+        div.removeChild(aButton); // Remove the enable/disable link element if the inside button wasn't added
     }
 
     return mod;
@@ -484,20 +497,23 @@ function createPlayerDiv(playerName) {
     new bootstrap.Tooltip(heading);
     player.appendChild(heading);
 
-    const div = document.createElement("div");
-    div.style = "flex-shrink: 0;";
-    player.appendChild(div);
+    // If the user doesn't have permission to manage server, don't show kick button
+    if (server_data["permissions"] && server_data["permissions"].includes("manage_server")) {
+        const div = document.createElement("div");
+        div.style = "flex-shrink: 0;";
+        player.appendChild(div);
 
-    const aButton = document.createElement("a");
-    aButton.id = playerName + "-button";
-    aButton.href = "#";
-    div.appendChild(aButton);
+        const aButton = document.createElement("a");
+        aButton.id = playerName + "-button";
+        aButton.href = "#";
+        div.appendChild(aButton);
 
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "btn kick-button";
-    button.innerHTML = "Kick";
-    aButton.appendChild(button);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "btn kick-button";
+        button.innerHTML = "Kick";
+        aButton.appendChild(button);
+    }
 
     return player;
 }
@@ -592,6 +608,96 @@ function removeTooltips(element) {
     });
 }
 
+function disableAndHide(element) {
+    element.hidden = true;
+    element.inert = true;
+    element.ariaHidden = true;
+    element.ariaDisabled = true;
+}
+
+function selectTriplePage(page, button) {
+    homePage.hidden = true;
+    homePage.ariaHidden = true;
+    homeTripleButton.children[0].classList.remove("page-selected");
+    modsPage.hidden = true;
+    modsPage.ariaHidden = true;
+    modsTripleButton.children[0].classList.remove("page-selected");
+    logsPage.hidden = true;
+    logsPage.ariaHidden = true;
+    logsTripleButton.children[0].classList.remove("page-selected");
+    configPage.hidden = true;
+    configPage.ariaHidden = true;
+    configQuadButton.children[0].classList.remove("page-selected");
+
+    page.hidden = false;
+    page.ariaHidden = false;
+    button.children[0].classList.add("page-selected");
+}
+
+function selectQuadPage(page, button) {
+    homePage.hidden = true;
+    homePage.ariaHidden = true;
+    homeQuadButton.children[0].classList.remove("page-selected");
+    modsPage.hidden = true;
+    modsPage.ariaHidden = true;
+    modsQuadButton.children[0].classList.remove("page-selected");
+    logsPage.hidden = true;
+    logsPage.ariaHidden = true;
+    logsQuadButton.children[0].classList.remove("page-selected");
+    configPage.hidden = true;
+    configPage.ariaHidden = true;
+    configQuadButton.children[0].classList.remove("page-selected");
+
+    page.hidden = false;
+    page.ariaHidden = false;
+    button.children[0].classList.add("page-selected");
+}
+
+function setElementPermissions(permissions) {
+    if (!permissions.includes("modify_settings")) {
+        disableAndHide(document.getElementById("settingButton"));
+    }
+    if (!permissions.includes("modify_mods")) {
+        disableAndHide(document.getElementById("uploadButton"));
+    }
+    if (!permissions.includes("manage_server")) {
+        disableAndHide(document.getElementById("restartServerButton"));
+        disableAndHide(document.getElementById("reloadModsButton"));
+        disableAndHide(document.getElementById("serverMessageButton"));
+    }
+    if (!permissions.includes("clear_logs")) {
+        disableAndHide(document.getElementById("clearLogsButton"));
+    }
+    if (!permissions.includes("configure")) {
+        disableAndHide(document.getElementById("quad-navbuttons"));
+        const triple_navbuttons = document.getElementById("triple-navbuttons");
+        triple_navbuttons.hidden = false;
+        triple_navbuttons.inert = false;
+        triple_navbuttons.ariaHidden = false;
+        triple_navbuttons.ariaDisabled = false;
+    }
+}
+
+function refreshServerStatus() {
+    if (!"error" in server_data || !"started" in server_data || !"connected" in server_data) {
+        return;
+    }
+    // Update server connection text
+    if (server_data["error"]) {
+        serverStatus.innerHTML = "Server Error";
+        serverStatus.style = "color: #FF0000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+    } else if (!server_data["started"]) {
+        serverStatus.innerHTML = "Server Offline";
+        serverStatus.style = "color: #000000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+    } else if (!server_data["connected"]) {
+        serverStatus.innerHTML = "Server Starting";
+        serverStatus.style = "color: #FFDE21; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+    } else {
+        serverStatus.innerHTML = "Server Online";
+        serverStatus.style = "color: #008000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+    }
+}
+
 function refreshMods(mods) {
     // Remove old mods
     removeTooltips(enabledMods);
@@ -618,11 +724,13 @@ function refreshMods(mods) {
             mod.style = "margin-top: 2%;";
             enabledMods.appendChild(mod);
             const disableButton = document.getElementById(key + "-button");
-            disableButton.addEventListener("click", () => {
-                disableButton.className = "disabled";
-                disableButton.children[0].disabled = true;
-                connection.send(JSON.stringify({"type": "disable", "disable": key}));
-            });
+            if (disableButton !== null) {
+                disableButton.addEventListener("click", () => {
+                    disableButton.className = "disabled";
+                    disableButton.children[0].disabled = true;
+                    connection.send(JSON.stringify({"type": "disable", "disable": key}));
+                });
+            }
         } else {
             total_disabled++;
             disabled_bytes += mods[key]["filesize"];
@@ -630,15 +738,19 @@ function refreshMods(mods) {
             mod.style = "margin-top: 2%;";
             disabledMods.appendChild(mod);
             const enableButton = document.getElementById(key + "-button");
-            enableButton.addEventListener("click", () => {
-                enableButton.className = "disabled";
-                enableButton.children[0].disabled = true;
-                connection.send(JSON.stringify({"type": "enable", "enable": key}));
-            });
+            if (enableButton !== null) {
+                enableButton.addEventListener("click", () => {
+                    enableButton.className = "disabled";
+                    enableButton.children[0].disabled = true;
+                    connection.send(JSON.stringify({"type": "enable", "enable": key}));
+                });
+            }
             const deleteButton = document.getElementById(key + "-delete-button");
-            deleteButton.addEventListener("click", () => {
-                showDeleteModal(key);
-            });
+            if (deleteButton !== null) {
+                deleteButton.addEventListener("click", () => {
+                    showDeleteModal(key);
+                });
+            }
         }
     }
     enabledModsTooltip.setContent({".tooltip-inner": String(total_enabled) + " (" + formatBytes(enabled_bytes) + ")"});
@@ -758,7 +870,7 @@ function refreshUpdateModal(modalTitle, modalContent, update = null) {
         } else {
             modalTitle.innerHTML = "Update Available! (" + server_data["version"] + " -> " + update["version"] + ")";
         }
-        modalContent.innerHTML = "Select the update that matches your system below:";
+        modalContent.innerHTML = "Detected system architecture: " + update["system_architecture"] + "<br><br>Select the update that matches your system below:";
     
         // Add files
         const files = update["files"];
@@ -843,22 +955,12 @@ connection.addEventListener("message", (event) => {
                         } else if (key == "logs") {
                             // Reload player logs on join logs change
                             refreshLogs(server_data["logs"]);
+                        } else if (key == "started") {
+                            refreshServerStatus();
                         } else if (key == "connected") {
-                            // Update server connection text
-                            if ("error" in server_data && server_data["error"]) {
-                                continue;
-                            }
-                            if (server_data["connected"]) {
-                                serverStatus.innerHTML = "Server Online";
-                                serverStatus.style = "color: #008000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
-                            } else {
-                                serverStatus.innerHTML = "Server Starting";
-                                serverStatus.style = "color: #FFDE21; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
-                            }
-                        } else if (key == "error" && server_data["error"]) {
-                            // Update server connection text
-                            serverStatus.innerHTML = "Server Error";
-                            serverStatus.style = "color: #FF0000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
+                            refreshServerStatus();
+                        } else if (key == "error") {
+                            refreshServerStatus();
                         } else if (key == "version") {
                             let version;
                             if (server_data["version"] == null) {
@@ -867,6 +969,8 @@ connection.addEventListener("message", (event) => {
                                 version = server_data["version"];
                             }
                             serverVersion.firstChild.textContent = "BeamMP " +  version;
+                        } else if (key == "permissions") {
+                            setElementPermissions(server_data["permissions"]);
                         }
                     }
                 }
@@ -933,7 +1037,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function 
 
             if (response.status == 201) {
                 uploadModalBS.hide();
-                filename = await response.text();
+                const uploaded_filename = await response.text();
                 showToast("info", "Uploaded mod as '" + filename + "'.");
             } else if (response.status == 206) {
                 if (uploadController.signal.aborted) {
@@ -1088,68 +1192,42 @@ document.getElementById("uploadButton").addEventListener("click", () => {
     showUploadModal();
 });
 
-homeButton.addEventListener("click", () => {
-    homePage.hidden = false;
-    homePage.ariaHidden = false;
-    homeButton.children[0].classList.add("page-selected");
-    modsPage.hidden = true;
-    modsPage.ariaHidden = true;
-    modsButton.children[0].classList.remove("page-selected");
-    logsPage.hidden = true;
-    logsPage.ariaHidden = true;
-    logsButton.children[0].classList.remove("page-selected");
-    configPage.hidden = true;
-    configPage.ariaHidden = true;
-    configButton.children[0].classList.remove("page-selected");
+homeQuadButton.addEventListener("click", () => {
+    selectQuadPage(homePage, homeQuadButton);
 
     refreshPlayers(server_data["players"]);
 });
 
-modsButton.addEventListener("click", () => {
-    homePage.hidden = true;
-    homePage.ariaHidden = true;
-    homeButton.children[0].classList.remove("page-selected");
-    modsPage.hidden = false;
-    modsPage.ariaHidden = false;
-    modsButton.children[0].classList.add("page-selected");
-    logsPage.hidden = true;
-    logsPage.ariaHidden = true;
-    logsButton.children[0].classList.remove("page-selected");
-    configPage.hidden = true;
-    configPage.ariaHidden = true;
-    configButton.children[0].classList.remove("page-selected");
+homeTripleButton.addEventListener("click", () => {
+    selectTriplePage(homePage, homeTripleButton);
+
+    refreshPlayers(server_data["players"]);
+});
+
+modsQuadButton.addEventListener("click", () => {
+    selectQuadPage(modsPage, modsQuadButton);
 
     connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
 });
 
-logsButton.addEventListener("click", () => {
-    homePage.hidden = true;
-    homePage.ariaHidden = true;
-    homeButton.children[0].classList.remove("page-selected");
-    modsPage.hidden = true;
-    modsPage.ariaHidden = true;
-    modsButton.children[0].classList.remove("page-selected");
-    logsPage.hidden = false;
-    logsPage.ariaHidden = false;
-    logsButton.children[0].classList.add("page-selected");
-    configPage.hidden = true;
-    configPage.ariaHidden = true;
-    configButton.children[0].classList.remove("page-selected");
+modsTripleButton.addEventListener("click", () => {
+    selectTriplePage(modsPage, modsTripleButton);
+
+    connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
+});
+
+logsQuadButton.addEventListener("click", () => {
+    selectQuadPage(logsPage, logsQuadButton);
 
     refreshLogs(server_data["logs"]);
 });
 
-configButton.addEventListener("click", () => {
-    homePage.hidden = true;
-    homePage.ariaHidden = true;
-    homeButton.children[0].classList.remove("page-selected");
-    modsPage.hidden = true;
-    modsPage.ariaHidden = true;
-    modsButton.children[0].classList.remove("page-selected");
-    logsPage.hidden = true;
-    logsPage.ariaHidden = true;
-    logsButton.children[0].classList.remove("page-selected");
-    configPage.hidden = false;
-    configPage.ariaHidden = false;
-    configButton.children[0].classList.add("page-selected");
+logsTripleButton.addEventListener("click", () => {
+    selectTriplePage(logsPage, logsTripleButton);
+
+    refreshLogs(server_data["logs"]);
+});
+
+configQuadButton.addEventListener("click", () => {
+    selectQuadPage(configPage, configQuadButton);
 });
