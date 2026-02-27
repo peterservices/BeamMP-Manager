@@ -32,16 +32,17 @@ const kickReason = document.getElementById("kickReason");
 const message = document.getElementById("message");
 const settingForm = document.getElementById("settingForm");
 
+const playersLabel = document.getElementById("playersLabel");
 const enabledModsLabel = document.getElementById("enabledModsLabel");
 const disabledModsLabel = document.getElementById("disabledModsLabel");
 
-const players = document.querySelector("#players");
-const serverStatus = document.querySelector("#serverStatus");
-const enabledMods = document.querySelector("#enabledMods");
-const disabledMods = document.querySelector("#disabledMods");
-const playerLogs = document.querySelector("#playerLogs");
-const chatLogs = document.querySelector("#chatLogs");
-const serverVersion = document.querySelector("#serverVersion");
+const players = document.getElementById("players");
+const serverStatus = document.getElementById("serverStatus");
+const enabledMods = document.getElementById("enabledMods");
+const disabledMods = document.getElementById("disabledMods");
+const playerLogs = document.getElementById("playerLogs");
+const chatLogs = document.getElementById("chatLogs");
+const serverVersion = document.getElementById("serverVersion");
 
 const server_data = {};
 const server_settings = {};
@@ -58,6 +59,7 @@ const reloadModalBS = bootstrap.Modal.getOrCreateInstance(reloadModal);
 const updateModalBS = bootstrap.Modal.getOrCreateInstance(updateModal);
 const settingModalBS = bootstrap.Modal.getOrCreateInstance(settingModal);
 
+const playersTooltip = new bootstrap.Tooltip(playersLabel);
 const enabledModsTooltip = new bootstrap.Tooltip(enabledModsLabel);
 const disabledModsTooltip = new bootstrap.Tooltip(disabledModsLabel);
 
@@ -378,7 +380,7 @@ function createModDiv(type, modName, filesize) {
     mod.className = "d-flex justify-content-between";
 
     const heading = document.createElement("h4");
-    heading.className = "text-truncate";
+    heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
     heading.innerHTML = modName;
     heading.setAttribute("data-bs-toggle", "tooltip");
@@ -391,6 +393,7 @@ function createModDiv(type, modName, filesize) {
     mod.appendChild(div);
 
     const aDownload = document.createElement("a");
+    aDownload.className = "tooltip-parent";
     aDownload.id = modName + "-download";
     aDownload.href = "mods/" + modName;
     aDownload.download = modName;
@@ -473,7 +476,7 @@ function createPlayerDiv(playerName) {
     player.className = "d-flex justify-content-between";
 
     const heading = document.createElement("h4");
-    heading.className = "text-truncate";
+    heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
     heading.innerHTML = playerName;
     heading.setAttribute("data-bs-toggle", "tooltip");
@@ -527,7 +530,7 @@ function createLogDiv(content, timestamp = null, tooltipContent = null, logType 
     } else {
         throw Error("Expected logType of value 'standard' or 'divider', got '" + logType + "'");
     }
-    heading.className = "text-truncate";
+    heading.className = "text-truncate tooltip-parent";
     heading.innerHTML = content;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", timestamp + tooltipContent);
@@ -552,7 +555,7 @@ function createUpdateDiv(file) {
     update.className = "d-flex justify-content-between";
 
     const heading = document.createElement("h6");
-    heading.className = "text-truncate";
+    heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
     heading.innerHTML = "OS: " + file["platform"] + ", Arch: " + file["architecture"];
     heading.setAttribute("data-bs-toggle", "tooltip");
@@ -579,12 +582,24 @@ function createUpdateDiv(file) {
     return update;
 }
 
+function removeTooltips(element) {
+    // Dispose of any tooltips attached to any elements with the tooltip-parent class
+    element.querySelectorAll(".tooltip-parent").forEach(element => {
+        const tooltip =bootstrap.Tooltip.getInstance(element);
+        if (tooltip != null) {
+            tooltip.dispose();
+        }
+    });
+}
+
 function refreshMods(mods) {
     // Remove old mods
+    removeTooltips(enabledMods);
     const enabledLength = enabledMods.children.length;
     for (let i = 0; i < enabledLength; i++) {
         enabledMods.children[0].remove();
     }
+    removeTooltips(disabledMods);
     const disabledLength = disabledMods.children.length;
     for (let i = 0; i < disabledLength; i++) {
         disabledMods.children[0].remove();
@@ -632,6 +647,7 @@ function refreshMods(mods) {
 
 function refreshPlayers(playerList) {
     // Remove old players
+    removeTooltips(players);
     const playersLength = players.children.length;
     for (let i = 0; i < playersLength; i++) {
         players.children[0].remove();
@@ -647,14 +663,17 @@ function refreshPlayers(playerList) {
             showKickModal(playerList[id]);
         });
     }
+    playersTooltip.setContent({".tooltip-inner": String(players.children.length)});
 }
 
 function refreshLogs(logs) {
     // Remove old logs
+    removeTooltips(playerLogs);
     const playerLogLength = playerLogs.children.length;
     for (let i = 0; i < playerLogLength; i++) {
         playerLogs.children[0].remove();
     }
+    removeTooltips(chatLogs);
     const chatLogLength = chatLogs.children.length;
     for (let i = 0; i < chatLogLength; i++) {
         chatLogs.children[0].remove();
@@ -721,6 +740,7 @@ function refreshMapDropdown(map_input, map_label, map_button2, map_dropdown2) {
 
 function refreshUpdateModal(modalTitle, modalContent, update = null) {
     // Remove old update files
+    removeTooltips(modalContent);
     const updateLength = modalContent.children.length;
     for (let i = 0; i < updateLength; i++) {
         modalContent.children[0].remove();
