@@ -887,6 +887,13 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         return {"mod_list": mods}
                 case "levels":
                     return {"levels": server_data.levels}
+                case "update":
+                    async with release_cache.lock:
+                        if release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now():
+                            updated = await update_release_cache()
+                            if not updated:
+                                return None
+                    return {"update": release_cache.model_dump()}
         case "command":
             if "command" not in ws_request:
                 return None
@@ -1083,53 +1090,42 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     return {"action": "clear"}
             return {"action": "clear", "success": False}
         case "update":
-            if "action" not in ws_request:
+            if "download_url" not in ws_request:
                 return None
-            match ws_request["action"]:
-                case "get":
-                    async with release_cache.lock:
-                        if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
-                            updated = await update_release_cache()
-                            if not updated:
-                                return None
-                        return {"update": release_cache.model_dump()}
-                case "update":
-                    if "download_url" not in ws_request:
+            async with release_cache.lock:
+                if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
+                    updated = await update_release_cache()
+                    if not updated:
                         return None
-                    async with release_cache.lock:
-                        if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
-                            updated = await update_release_cache()
-                            if not updated:
-                                return None
-                    for file in release_cache.files:
-                        if file.download_url == ws_request["download_url"]:
-                            filepath = configuration.beammp_executable_path + ".updated"
-                            if await aioos.path.exists(filepath): # Make sure the temporary update file doesn't already exist
+            for file in release_cache.files:
+                if file.download_url == ws_request["download_url"]:
+                    filepath = configuration.beammp_executable_path + ".updated"
+                    if await aioos.path.exists(filepath): # Make sure the temporary update file doesn't already exist
+                        return {"action": "update", "success": False}
+
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(file.download_url) as response:
+                            async with aiofiles.open(filepath, "wb") as file:
+                                async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
+                                    await file.write(chunk)
+                    async with server_executable_lock:
+                        if server_data.process is not None and server_data.process.returncode is None:
+                            server_data.process.terminate()
+                        if await aioos.path.exists(configuration.beammp_executable_path):
+                            try:
+                                await aioos.remove(configuration.beammp_executable_path)
+                            except (PermissionError, OSError):
+                                logger.exception("Failed to delete server executable")
+                                await aioos.remove(filepath)
                                 return {"action": "update", "success": False}
 
-                            async with aiohttp.ClientSession() as session:
-                                async with session.get(file.download_url) as response:
-                                    async with aiofiles.open(filepath, "wb") as file:
-                                        async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
-                                            await file.write(chunk)
-                            async with server_executable_lock:
-                                if server_data.process is not None and server_data.process.returncode is None:
-                                    server_data.process.terminate()
-                                if await aioos.path.exists(configuration.beammp_executable_path):
-                                    try:
-                                        await aioos.remove(configuration.beammp_executable_path)
-                                    except (PermissionError, OSError):
-                                        logger.exception("Failed to delete server executable")
-                                        await aioos.remove(filepath)
-                                        return {"action": "update", "success": False}
+                        await aioos.rename(filepath, configuration.beammp_executable_path)
+                        st = await aioos.stat(configuration.beammp_executable_path)
+                        await asyncio.to_thread(os.chmod, configuration.beammp_executable_path, st.st_mode | stat.S_IEXEC) # Set the file as executable for the current user
 
-                                await aioos.rename(filepath, configuration.beammp_executable_path)
-                                st = await aioos.stat(configuration.beammp_executable_path)
-                                await asyncio.to_thread(os.chmod, configuration.beammp_executable_path, st.st_mode | stat.S_IEXEC) # Set the file as executable for the current user
-
-                                await start_server()
-                            return {"action": "update"}
-                    return {"action": "update", "success": False}
+                        await start_server()
+                    return {"action": "update"}
+            return {"action": "update", "success": False}
         case "ping":
             return True
     return None
