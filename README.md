@@ -66,24 +66,24 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 `config.json` looks like this by default:
 ```
 {
-     "authorized_discord_users": {
-          "-1": {
-               "permissions": [
-                    "modify_settings",
-                    "modify_mods",
-                    "manage_server"
-               ]
-          }
-     },
-     "beammp_executable_path": "",
-     "detect_mod_maps": true,
-     "discord_oauth2_redirect_url": "",
-     "maximum_log_entries": 500,
-     "persist_data": true,
-     "preserve_setting_changes": true,
-     "public_dashboard": true,
-     "url_base_path": "/beammp",
-     "virustotal_scanning": true
+    "authorized_discord_users": {
+        "-1": {
+            "permissions": [
+                "modify_settings",
+                "modify_mods",
+                "manage_server"
+            ]
+        }
+    },
+    "beammp_executable_path": "",
+    "detect_mod_maps": true,
+    "discord_oauth2_redirect_url": "",
+    "maximum_log_entries": 500,
+    "persist_data": true,
+    "preserve_setting_changes": true,
+    "public_dashboard": true,
+    "url_base_path": "/beammp",
+    "virustotal_scanning": true
 }
 ```
 **authorized_users** - An array of Discord user IDs who will be able to login to the web manager. Each Discord user ID has an array that has a `permissions` list. The possible permissions a user can have are `modify_settings`, `modify_mods`, `manage_server`, `clear_logs`, and `configure`.

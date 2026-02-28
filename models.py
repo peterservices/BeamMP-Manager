@@ -48,7 +48,7 @@ class PersistentData(BaseModel):
         Dump the model and write the JSON to disk asynchronously.
         """
         async with self.lock:
-            to_write = self.model_dump_json(indent=5)
+            to_write = self.model_dump_json(indent=4)
             async with aiofiles.open(filename, "w") as file:
                 await file.write(to_write)
 
