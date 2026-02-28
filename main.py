@@ -82,7 +82,7 @@ QuartAuth(app, duration=30 * 24 * 60 * 60)
 
 configuration = LocalConfiguration()
 if not os.path.exists("config.json"):
-    to_write = configuration.model_dump_json(indent=5)
+    to_write = configuration.model_dump_json(indent=4)
     with open("config.json", "x") as file:
         file.write(to_write)
 else:
@@ -93,7 +93,7 @@ else:
         configuration.beammp_executable_path = os.path.abspath(configuration.beammp_executable_path)
 
     # Save any new changes to disk
-    json_data = configuration.model_dump_json(indent=5)
+    json_data = configuration.model_dump_json(indent=4)
     if json_data != config_str:
         to_write = json_data
         with open("config.json", "w") as file:
@@ -102,7 +102,7 @@ else:
 persistent_data = PersistentData()
 if configuration.persist_data:
     if not os.path.exists("persistent_data.json"):
-        to_write = configuration.model_dump_json(indent=5)
+        to_write = configuration.model_dump_json(indent=4)
         with open("persistent_data.json", "x") as file:
             file.write(to_write)
     else:
@@ -113,7 +113,7 @@ if configuration.persist_data:
         persistent_data = PersistentData.model_validate(persistent_dict)
 
         # Save any new changes to disk
-        json_data = persistent_data.model_dump_json(indent=5)
+        json_data = persistent_data.model_dump_json(indent=4)
         if json_data != persistent_str:
             to_write = json_data
             with open("persistent_data.json", "w") as file:
@@ -271,7 +271,7 @@ async def write_config() -> None:
     """
     Write the configuration to disk asynchronously.
     """
-    to_write = configuration.model_dump_json(indent=5)
+    to_write = configuration.model_dump_json(indent=4)
     async with aiofiles.open("config.json", "w") as file:
         await file.write(to_write)
 
@@ -987,6 +987,7 @@ async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
         websockets.append(task)
+        await websocket.send(json.dumps({"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions}))
         data = server_data.model_dump_json()
         await websocket.send(data)
         data = server_settings.model_dump()
