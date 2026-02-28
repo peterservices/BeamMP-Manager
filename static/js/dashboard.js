@@ -75,11 +75,6 @@ const pingServer = setInterval(() => {
     connection.send(JSON.stringify({"type": "ping"}));
 }, 60000);
 
-// Request user permissions when the websocket is ready
-connection.onopen = () => {
-    connection.send(JSON.stringify({"type": "request", "request": "permissions"}));
-}
-
 function showToast(type, text) {
     // Select the type of toast to copy
     let referenceToast;
