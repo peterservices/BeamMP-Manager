@@ -67,8 +67,6 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
-if CLIENT_ID is None or CLIENT_SECRET is None:
-    raise KeyError("Both the CLIENT_ID and CLIENT_SECRET environment variables are required for Discord login.")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if SECRET_KEY is None:
@@ -101,6 +99,12 @@ else:
         to_write = json_data
         with open("config.json", "w") as file:
             file.write(to_write)
+
+if configuration.require_login:
+    if CLIENT_ID is None or CLIENT_SECRET is None:
+        raise KeyError("Both the CLIENT_ID and CLIENT_SECRET environment variables are required for Discord login.")
+else:
+    logger.warning("Operating without a login requirement! If this server is exposed to the public internet, anyone can manage your server!")
 
 persistent_data = PersistentData()
 if configuration.persist_data:
@@ -237,6 +241,8 @@ async def update_release_cache() -> bool:
     return True
 
 def user_has_permissions(user: AuthUser, permissions: list) -> bool:
+    if not configuration.require_login:
+        return True # Without a login requirement, the user is assumed to have full permissions.
     auth_id = int(user.auth_id)
     for permission in permissions:
         if permission not in configuration.authorized_discord_users.get(auth_id).permissions:
@@ -286,7 +292,7 @@ def authorization_required(required_permissions: list[str] = []):
     def decorator(func):
         @wraps(func)
         @login_required
-        async def wrapper(*args, **kwargs):
+        async def login_wrapper(*args, **kwargs):
             if int(current_user.auth_id) not in configuration.authorized_discord_users:
                 raise Unauthorized()
 
@@ -294,7 +300,14 @@ def authorization_required(required_permissions: list[str] = []):
                 return abort(403)
 
             return await current_app.ensure_async(func)(*args, **kwargs)
-        return wrapper
+
+        @wraps(func)
+        async def open_wrapper(*args, **kwargs):
+            return await current_app.ensure_async(func)(*args, **kwargs)
+
+        if not configuration.require_login:
+            return open_wrapper
+        return login_wrapper
     return decorator
 
 # -- Website routes --
@@ -310,13 +323,13 @@ async def dashboard():
 
 @app.route(f"{configuration.url_base_path}/guest_dashboard")
 async def guest_dashboard():
-    if not configuration.public_dashboard:
+    if not configuration.public_dashboard or not configuration.require_login:
         return abort(404)
     return await render_template("guest_dashboard.html", base=configuration.url_base_path)
 
 @app.route(f"{configuration.url_base_path}/mods_list")
 async def guest_mods():
-    if not configuration.public_dashboard:
+    if not configuration.public_dashboard or not configuration.require_login:
         return abort(404)
     mods = None
     async with aiofiles.open("Resources/Client/mods.json") as file:
@@ -332,6 +345,8 @@ async def guest_mods():
 
 @app.route(f"{configuration.url_base_path}/login")
 async def login():
+    if not configuration.require_login:
+        return abort(404)
     error = session.get("error", "")
     if "error" in session:
         session.pop("error")
@@ -345,11 +360,15 @@ async def login():
 
 @app.route(f"{configuration.url_base_path}/login/uri")
 async def login_uri():
+    if not configuration.require_login:
+        return abort(404)
     uri = oauth_client.generate_uri(skip_prompt=True, scope=["identify"])
     return redirect(uri)
 
 @app.route(f"{configuration.url_base_path}/login/oauth2")
 async def oauth_login():
+    if not configuration.require_login:
+        return abort(404)
     session.permanent = True
     app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
     session["error"] = "error"
@@ -371,24 +390,37 @@ async def oauth_login():
 
 @app.route(f"{configuration.url_base_path}/logout")
 async def logout():
+    if not configuration.require_login:
+        return abort(404)
     logout_user()
     return redirect(f"{configuration.url_base_path}/login")
 
 @app.route(f"{configuration.url_base_path}/static/<string:folder>/<string:filename>")
 async def get_static_file(folder: str, filename: str):
-    authenticated = await current_user.is_authenticated
+    authenticated = not configuration.require_login or await current_user.is_authenticated
+    authorized = not configuration.require_login or (authenticated and int(current_user.auth_id) in configuration.authorized_discord_users)
     if folder == "css":
-        if not authenticated and filename not in ("guest_dashboard.css", "login.css"):
-            return abort(401)
-        if not configuration.public_dashboard and filename == "guest_dashboard.css":
+        if filename not in ("guest_dashboard.css", "login.css"):
+            if not authenticated:
+                return abort(401)
+            if not authorized:
+                return abort(403)
+        if filename == "guest_dashboard.css" and (not configuration.public_dashboard or not configuration.require_login):
+            return abort(404)
+        if filename == "login.css" and not configuration.require_login:
             return abort(404)
         path = safe_join("static/css/", filename)
     elif folder == "images":
         path = safe_join("static/images/", filename)
     elif folder == "js":
-        if not authenticated and filename not in ("guest_dashboard.js", "login.js"):
-            return abort(401)
-        if not configuration.public_dashboard and filename == "guest_dashboard.js":
+        if filename not in ("guest_dashboard.js", "login.js"):
+            if not authenticated:
+                return abort(401)
+            if not authorized:
+                return abort(403)
+        if filename == "guest_dashboard.js" and (not configuration.public_dashboard or not configuration.require_login):
+            return abort(404)
+        if filename == "login.js" and not configuration.require_login:
             return abort(404)
         path = safe_join("static/js/", filename)
     else:
@@ -399,9 +431,13 @@ async def get_static_file(folder: str, filename: str):
 
 @app.route(f"{configuration.url_base_path}/mods/<string:filename>")
 async def get_mod_file(filename: str):
-    authenticated = await current_user.is_authenticated
-    if not configuration.public_dashboard and not authenticated:
-        return abort(401)
+    authenticated = not configuration.require_login or await current_user.is_authenticated
+    authorized = not configuration.require_login or (authenticated and int(current_user.auth_id) in configuration.authorized_discord_users)
+    if not configuration.public_dashboard:
+        if not authenticated:
+            return abort(401)
+        if not authorized:
+            return abort(403)
     path = safe_join("Resources/Client/", filename)
     if path is None or (path is not None and not await aioos.path.exists(path)):
         if not authenticated:
@@ -719,6 +755,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         release["system_architecture"] = architecture
                     return {"update": release}
                 case "permissions":
+                    if not configuration.require_login:
+                        return {"permissions": True}
                     return {"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions}
                 case "beampaint_installed":
                     return {"beampaint_installed": server_data.beampaint_installed}
@@ -1042,7 +1080,8 @@ async def websocket_connect():
     try:
         task = asyncio.ensure_future(receive())
         websockets.append(task)
-        await websocket.send(json.dumps({"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions}))
+        permissions = {"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions} if configuration.require_login else {"permissions": True}
+        await websocket.send(json.dumps(permissions))
         data = server_data.model_dump_json()
         await websocket.send(data)
         data = server_settings.model_dump()
