@@ -52,6 +52,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * User permission levels to manage dashboard access
   * Restart server
   * Manually reload mods
+  * Install and uninstall BeamPaint
   * Send chat messages as the server
 
 ### **Planned Features**
@@ -107,4 +108,4 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 **virustotal_scanning** - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
 
 > [!IMPORTANT]
-> BeamMP-Manager is not affiliated or endorsed in any way by BeamMP or BeamNG Gmbh.
+> BeamMP-Manager is not affiliated or endorsed in any way by BeamPaint, BeamMP, or BeamNG Gmbh.
