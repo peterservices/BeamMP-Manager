@@ -69,7 +69,7 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
-if SECRET_KEY is None:
+if SECRET_KEY is None or len(SECRET_KEY) == 0:
     SECRET_KEY = token_urlsafe() # Generate a new SECRET_KEY
     if DOTENV_PATH != "":
         set_key(DOTENV_PATH, "SECRET_KEY", SECRET_KEY) # Save the SECRET_KEY to preserve sessions across restarts
@@ -101,7 +101,7 @@ else:
             file.write(to_write)
 
 if configuration.require_login:
-    if CLIENT_ID is None or CLIENT_SECRET is None:
+    if CLIENT_ID is None or len(CLIENT_ID) == 0 or CLIENT_SECRET is None or len(CLIENT_SECRET) == 0:
         raise KeyError("Both the CLIENT_ID and CLIENT_SECRET environment variables are required for Discord login.")
 else:
     logger.warning("Operating without a login requirement! If this server is exposed to the public internet, anyone can manage your server!")
