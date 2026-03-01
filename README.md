@@ -107,7 +107,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 
 **require_login** - Whether users must login to access the dashboard. When disabled, anyone with access will have full permissions.
 
-**url_base_path** - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just set this to `/`.
+**url_base_path** - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just leave this empty.
 
 **virustotal_scanning** - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
 
