@@ -437,7 +437,7 @@ function createModDiv(type, modName, filesize) {
     image.appendChild(path2);
 
     // If the user doesn't have permission to modify mods, don't show enable and disable buttons
-    if (server_data["permissions"] && server_data["permissions"].includes("modify_mods")) {
+    if (server_data["permissions"] && (server_data["permissions"] === true || server_data["permissions"].includes("modify_mods"))) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
@@ -494,7 +494,7 @@ function createPlayerDiv(playerName) {
     player.appendChild(heading);
 
     // If the user doesn't have permission to manage server, don't show kick button
-    if (server_data["permissions"] && server_data["permissions"].includes("manage_server")) {
+    if (server_data["permissions"] && (server_data["permissions"] === true || server_data["permissions"].includes("manage_server"))) {
         const div = document.createElement("div");
         div.style = "flex-shrink: 0;";
         player.appendChild(div);
@@ -647,6 +647,10 @@ function selectQuadPage(page, button) {
 }
 
 function setElementPermissions(permissions) {
+    if (permissions === true) {
+        disableAndHide(document.getElementById("logoutButton"));
+        return; // Login is disabled, so the user has every permission
+    }
     if (!permissions.includes("modify_settings")) {
         disableAndHide(document.getElementById("settingButton"));
     }
