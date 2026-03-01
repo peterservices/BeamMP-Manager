@@ -34,6 +34,7 @@ class LocalConfiguration(BaseModel):
     persist_data: bool = True
     preserve_setting_changes: bool = True
     public_dashboard: bool = True
+    require_login: bool = True
     url_base_path: str = "/beammp"
     virustotal_scanning: bool = True
 
