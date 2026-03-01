@@ -126,7 +126,8 @@ if configuration.persist_data:
             with open("persistent_data.json", "w") as file:
                 file.write(to_write)
 
-oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect=configuration.discord_oauth2_redirect_url, bot_token="")
+if configuration.require_login:
+    oauth_client = discordoauth2.AsyncClient(id=CLIENT_ID, secret=CLIENT_SECRET, redirect=configuration.discord_oauth2_redirect_url, bot_token="")
 
 server_data = ServerData(persistent_data=persistent_data)
 server_settings = ServerSettings()
