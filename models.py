@@ -153,6 +153,7 @@ class ServerData(BaseModel):
     port: int | None = None
     max_clients: int | None = None
     mods: int = 0
+    beampaint_installed: bool = False
     players: dict[str, str] = {}
 
     @computed_field
