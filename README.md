@@ -10,7 +10,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 ### **Prerequisites**
 
 * Be able to run a standalone [BeamMP Server](https://github.com/BeamMP/BeamMP-Server)
-* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications)
+* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications). You can skip this prerequisite if you don't plan to expose the server to the public internet.
 * Install [uv](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2) OR a standalone compatible Python version
   * [uv] Install a compatible version of Python using the terminal (ex: `uv python install 3.13`)
 * [Optional] Have a [VirusTotal](https://www.virustotal.com) API key
@@ -35,6 +35,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * Upload mods
   * Disable mods
   * Delete mods
+  * Automatically install/uninstall server-side mods such as BeamPaint
 * Player Management
   * View online players
   * Kick players
@@ -52,7 +53,6 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * User permission levels to manage dashboard access
   * Restart server
   * Manually reload mods
-  * Install and uninstall BeamPaint
   * Send chat messages as the server
 
 ### **Planned Features**
@@ -83,6 +83,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
     "persist_data": true,
     "preserve_setting_changes": true,
     "public_dashboard": true,
+    "require_login": true,
     "url_base_path": "/beammp",
     "virustotal_scanning": true
 }
@@ -102,6 +103,11 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 **preserve_setting_changes** - Whether setting changes should be saved to the ServerConfig.toml file. If not, setting changes will be cleared after a BeamMP server restart.
 
 **public_dashboard** - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
+
+> [!CAUTION]
+>  You should never disable **require_login** unless the server is not exposed to the public internet, and you trust everyone on your network.
+
+**require_login** - Whether users must login to access the dashboard. When disabled, anyone with access will have full permissions.
 
 **url_base_path** - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just set this to `/`.
 
