@@ -1008,6 +1008,11 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     async with server_executable_lock:
                         if server_data.process is not None and server_data.process.returncode is None:
                             server_data.process.terminate()
+                            try:
+                                await asyncio.wait_for(server_data.process.communicate(), timeout=5) # Ensure the executable is closed so it can be deleted
+                            except TimeoutError:
+                                logger.exception("Server executable failed to exit in time")
+                                server_data.process.kill() # Kill the server if it exceeded the timeout
                         if await aioos.path.exists(configuration.beammp_executable_path):
                             try:
                                 await aioos.remove(configuration.beammp_executable_path)
@@ -1297,7 +1302,8 @@ async def monitor_temp_files() -> None:
 @app.before_serving
 async def startup():
     # Make sure all necessary folders and files exist and clear any temporary files
-    if "Resources" not in await aioos.listdir():
+    main_directory = await aioos.listdir()
+    if "Resources" not in main_directory:
         await aioos.mkdir("Resources")
     folders = await aioos.listdir("Resources/")
     if "Client" not in folders:
@@ -1312,6 +1318,10 @@ async def startup():
         temp_files = await aioos.listdir("Resources/Client.temp")
         for file in temp_files:
             await aioos.remove(os.path.join("Resources/Client.temp/", file))
+    if configuration.beammp_executable_path + ".temp" in main_directory:
+        await aioos.remove(configuration.beammp_executable_path + ".temp")
+    if await aioos.path.exists("Resources/Server/BeamPaintUpdater/main.lua.temp"):
+        await aioos.remove("Resources/Server/BeamPaintUpdater/main.lua.temp")
     if "mods.json" not in await aioos.listdir("Resources/Client/"):
         async with aiofiles.open("Resources/Client/mods.json", "w") as file:
             await file.write(json.dumps(None))
