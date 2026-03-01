@@ -59,6 +59,9 @@ from models import (
 logging.basicConfig(level=logging.DEBUG, format="[BeamMP Manager] [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+BEAMPAINT_MAIN_LUA = "https://cdn.beampaint.com/api/v2/download/release/updater/main.lua"
+BEAMMP_GITHUB_RELEASE = "https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest"
+
 DOTENV_PATH = find_dotenv()
 load_dotenv(dotenv_path=DOTENV_PATH)
 
@@ -213,7 +216,7 @@ async def update_release_cache() -> bool:
     Fetches the latest release information from GitHub and updates the cache. Returns whether the update was successful.
     """
     async with aiohttp.ClientSession() as session:
-        async with session.get("https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest") as response:
+        async with session.get(BEAMMP_GITHUB_RELEASE) as response:
             if response.status < 200 or response.status >= 300:
                 return False
             response_json: dict[str, Any] = await response.json()
@@ -265,6 +268,7 @@ async def start_server() -> None:
             except (PermissionError, OSError):
                 server_data.error = True
                 logger.exception("Failed to start BeamMP server")
+        server_data.beampaint_installed = await aioos.path.exists("Resources/Server/BeamPaintUpdater/")
         await send_changed_data(old_data)
 
 async def write_config() -> None:
@@ -716,6 +720,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     return {"update": release}
                 case "permissions":
                     return {"permissions": configuration.authorized_discord_users.get(int(current_user.auth_id)).permissions}
+                case "beampaint_installed":
+                    return {"beampaint_installed": server_data.beampaint_installed}
         case "command":
             if "command" not in ws_request:
                 return None
@@ -935,12 +941,14 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         return None
             for file in release_cache.files:
                 if file.download_url == ws_request["download_url"]:
-                    filepath = configuration.beammp_executable_path + ".updated"
+                    filepath = configuration.beammp_executable_path + ".temp"
                     if await aioos.path.exists(filepath): # Make sure the temporary update file doesn't already exist
                         return {"action": "update", "success": False}
 
                     async with aiohttp.ClientSession() as session:
                         async with session.get(file.download_url) as response:
+                            if response.status < 200 or response.status >= 300:
+                                return {"action": "update", "success": False}
                             async with aiofiles.open(filepath, "wb") as file:
                                 async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
                                     await file.write(chunk)
@@ -962,6 +970,53 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         await start_server()
                     return {"action": "update"}
             return {"action": "update", "success": False}
+        case "beampaint":
+            if "action" not in ws_request:
+                return None
+            if not user_has_permissions(current_user, ["configure"]):
+                return None
+
+            match ws_request["action"]:
+                case "install":
+                    if await aioos.path.exists("Resources/Server/BeamPaintUpdater/"):
+                        return {"action": "beampaint", "type": "install", "success": False}
+
+                    await aioos.mkdir("Resources/Server/BeamPaintUpdater")
+                    filepath = "Resources/Server/BeamPaintUpdater/main.lua.temp"
+                    if await aioos.path.exists(filepath): # Make sure the temporary beampaint file doesn't already exist
+                        return {"action": "beampaint", "type": "install", "success": False}
+
+                    async with aiohttp.ClientSession() as session:
+                        async with session.get(BEAMPAINT_MAIN_LUA) as response:
+                            if response.status < 200 or response.status >= 300:
+                                return {"action": "beampaint", "type": "install", "success": False}
+                            async with aiofiles.open(filepath, "wb") as file:
+                                await file.write(await response.content.read())
+                    await aioos.rename(filepath, "Resources/Server/BeamPaintUpdater/main.lua")
+
+                    async with state_lock:
+                        old_data = snapshot_server_data()
+                        server_data.beampaint_installed = True
+                        await send_changed_data(old_data)
+                    return {"action": "beampaint", "type": "install"}
+                case "uninstall":
+                    try:
+                        for folder in ("Resources/Server/BeamPaintUpdater/", "Resources/Server/BeamPaintServerPlugin/"):
+                            if await aioos.path.exists(folder):
+                                for file in await aioos.listdir(folder):
+                                    await aioos.remove(folder + file)
+                                await aioos.rmdir(folder)
+                        if await aioos.path.exists("Resources/Client/BeamPaint.zip"):
+                            await aioos.remove("Resources/Client/BeamPaint.zip")
+                    except (PermissionError, OSError):
+                        logger.exception("Failed to delete all BeamPaint files!")
+                        return {"action": "beampaint", "type": "uninstall", "success": False}
+                    await run_command("reloadmods")
+                    async with state_lock:
+                        old_data = snapshot_server_data()
+                        server_data.beampaint_installed = False
+                        await send_changed_data(old_data)
+                    return {"action": "beampaint", "type": "uninstall"}
         case "ping":
             return True
     return None
@@ -1085,6 +1140,8 @@ async def process_new_lines(new_lines: list[str]) -> None:
                         receiver = "everyone"
                         message = " ".join(data[5:])
                     server_data.persistent_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
+                elif data[2] == "[LUA]" or data[2] == "[LUA" and data[3] == "WARN]":
+                    pass # Server-side mods can trigger these log types
                 else:
                     logger.warning(f"Invalid log type {data[2]}")
             elif "::" in data[0]:
