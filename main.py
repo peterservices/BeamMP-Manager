@@ -62,6 +62,10 @@ logger = logging.getLogger(__name__)
 BEAMPAINT_MAIN_LUA = "https://cdn.beampaint.com/api/v2/download/release/updater/main.lua"
 BEAMMP_GITHUB_RELEASE = "https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest"
 
+# The nameservers to be used when making web requests on Windows (Cloudflare)
+# Without specified nameservers on Windows, aiohttp raises a dns error
+WINDOWS_NAMESERVERS = ["1.1.1.1", "1.0.0.1"]
+
 DOTENV_PATH = find_dotenv()
 load_dotenv(dotenv_path=DOTENV_PATH)
 
@@ -220,7 +224,12 @@ async def update_release_cache() -> bool:
     """
     Fetches the latest release information from GitHub and updates the cache. Returns whether the update was successful.
     """
-    async with aiohttp.ClientSession() as session:
+    if platform.system().lower() == "windows":
+        resolver = aiohttp.AsyncResolver(nameservers=WINDOWS_NAMESERVERS)
+        connector = aiohttp.TCPConnector(resolver=resolver)
+    else:
+        connector = None
+    async with aiohttp.ClientSession(connector=connector) as session:
         async with session.get(BEAMMP_GITHUB_RELEASE) as response:
             if response.status < 200 or response.status >= 300:
                 return False
@@ -235,9 +244,9 @@ async def update_release_cache() -> bool:
         name = asset["name"].split(".")
         if name[0] != "BeamMP-Server":
             continue
-        platform = "windows" if "exe" in name else ".".join(name[1:-1])
-        architecture = name[-1]
-        file = ReleaseFile(platform=platform, architecture=architecture, download_url=asset["browser_download_url"], size=asset["size"])
+        file_platform = "windows" if "exe" in name else ".".join(name[1:-1])
+        file_architecture = name[-1]
+        file = ReleaseFile(platform=file_platform, architecture=file_architecture, download_url=asset["browser_download_url"], size=asset["size"])
         release_cache.files.append(file)
     return True
 
@@ -984,7 +993,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     if await aioos.path.exists(filepath): # Make sure the temporary update file doesn't already exist
                         return {"action": "update", "success": False}
 
-                    async with aiohttp.ClientSession() as session:
+                    if platform.system().lower() == "windows":
+                        resolver = aiohttp.AsyncResolver(nameservers=WINDOWS_NAMESERVERS)
+                        connector = aiohttp.TCPConnector(resolver=resolver)
+                    else:
+                        connector = None
+                    async with aiohttp.ClientSession(connector=connector) as session:
                         async with session.get(file.download_url) as response:
                             if response.status < 200 or response.status >= 300:
                                 return {"action": "update", "success": False}
@@ -1025,7 +1039,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     if await aioos.path.exists(filepath): # Make sure the temporary beampaint file doesn't already exist
                         return {"action": "beampaint", "type": "install", "success": False}
 
-                    async with aiohttp.ClientSession() as session:
+                    if platform.system().lower() == "windows":
+                        resolver = aiohttp.AsyncResolver(nameservers=WINDOWS_NAMESERVERS)
+                        connector = aiohttp.TCPConnector(resolver=resolver)
+                    else:
+                        connector = None
+                    async with aiohttp.ClientSession(connector=connector) as session:
                         async with session.get(BEAMPAINT_MAIN_LUA) as response:
                             if response.status < 200 or response.status >= 300:
                                 return {"action": "beampaint", "type": "install", "success": False}
