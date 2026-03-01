@@ -46,6 +46,7 @@ const disabledMods = document.getElementById("disabledMods");
 const playerLogs = document.getElementById("playerLogs");
 const chatLogs = document.getElementById("chatLogs");
 const serverVersion = document.getElementById("serverVersion");
+const beampaint = document.getElementById("beampaint");
 
 const server_data = {};
 const server_settings = {};
@@ -603,6 +604,13 @@ function removeTooltips(element) {
     });
 }
 
+function enableAndShow(element) {
+    element.hidden = false;
+    element.inert = false;
+    element.ariaHidden = false;
+    element.ariaDisabled = false;
+}
+
 function disableAndHide(element) {
     element.hidden = true;
     element.inert = true;
@@ -611,40 +619,30 @@ function disableAndHide(element) {
 }
 
 function selectTriplePage(page, button) {
-    homePage.hidden = true;
-    homePage.ariaHidden = true;
+    disableAndHide(homePage);
     homeTripleButton.children[0].classList.remove("page-selected");
-    modsPage.hidden = true;
-    modsPage.ariaHidden = true;
+    disableAndHide(modsPage);
     modsTripleButton.children[0].classList.remove("page-selected");
-    logsPage.hidden = true;
-    logsPage.ariaHidden = true;
+    disableAndHide(logsPage);
     logsTripleButton.children[0].classList.remove("page-selected");
-    configPage.hidden = true;
-    configPage.ariaHidden = true;
+    disableAndHide(configPage);
     configQuadButton.children[0].classList.remove("page-selected");
 
-    page.hidden = false;
-    page.ariaHidden = false;
+    enableAndShow(page);
     button.children[0].classList.add("page-selected");
 }
 
 function selectQuadPage(page, button) {
-    homePage.hidden = true;
-    homePage.ariaHidden = true;
+    disableAndHide(homePage);
     homeQuadButton.children[0].classList.remove("page-selected");
-    modsPage.hidden = true;
-    modsPage.ariaHidden = true;
+    disableAndHide(modsPage);
     modsQuadButton.children[0].classList.remove("page-selected");
-    logsPage.hidden = true;
-    logsPage.ariaHidden = true;
+    disableAndHide(logsPage);
     logsQuadButton.children[0].classList.remove("page-selected");
-    configPage.hidden = true;
-    configPage.ariaHidden = true;
+    disableAndHide(configPage);
     configQuadButton.children[0].classList.remove("page-selected");
 
-    page.hidden = false;
-    page.ariaHidden = false;
+    enableAndShow(page);
     button.children[0].classList.add("page-selected");
 }
 
@@ -665,11 +663,7 @@ function setElementPermissions(permissions) {
     }
     if (!permissions.includes("configure")) {
         disableAndHide(document.getElementById("quad-navbuttons"));
-        const triple_navbuttons = document.getElementById("triple-navbuttons");
-        triple_navbuttons.hidden = false;
-        triple_navbuttons.inert = false;
-        triple_navbuttons.ariaHidden = false;
-        triple_navbuttons.ariaDisabled = false;
+        enableAndShow(document.getElementById("triple-navbuttons"));
     }
 }
 
@@ -811,7 +805,9 @@ function refreshLogs(logs) {
         } else if (["start"].includes(logs[i]["type"])) {
             const log = createLogDiv(logs[i]["message"], timestamp=logs[i]["timestamp"], tooltipContent=null, logType="divider");
             playerLogs.appendChild(log);
-            chatLogs.appendChild(log.cloneNode(true));
+            const log2 = log.cloneNode(true);
+            new bootstrap.Tooltip(log2.querySelector(".tooltip-parent")); // Initialize the cloned node's tooltip
+            chatLogs.appendChild(log2);
         }
     }
 }
@@ -911,6 +907,12 @@ connection.addEventListener("message", (event) => {
                 connection.send(JSON.stringify({"type": "request", "request": "mod_list"}));
             } else if (data["action"] == "update") {
                 showToast("info", "Server update complete.");
+            } else if (data["action"] == "beampaint") {
+                if (data["type"] == "install") {
+                    showToast("info", "BeamPaint installed. You will need to restart the server once to finish downloading the mod, and once again to enable it.");
+                } else {
+                    showToast("info", "BeamPaint uninstalled.");
+                }
             }
         } else {
             if (data["type"] && data["type"] == "settings") {
@@ -966,6 +968,16 @@ connection.addEventListener("message", (event) => {
                             serverVersion.firstChild.textContent = "BeamMP " +  version;
                         } else if (key == "permissions") {
                             setElementPermissions(server_data["permissions"]);
+                        } else if (key == "beampaint_installed") {
+                            if (server_data["beampaint_installed"]) {
+                                beampaint.firstChild.textContent = "BeamPaint Installed";
+                                disableAndHide(document.getElementById("beampaintInstallButton"));
+                                enableAndShow(document.getElementById("beampaintDeleteButton"));
+                            } else {
+                                beampaint.firstChild.textContent = "BeamPaint Not Installed";
+                                enableAndShow(document.getElementById("beampaintInstallButton"));
+                                disableAndHide(document.getElementById("beampaintDeleteButton"));
+                            }
                         }
                     }
                 }
@@ -1154,6 +1166,20 @@ document.getElementById("settingButton").addEventListener("click", () => {
 document.getElementById("updateButton").addEventListener("click", () => {
     connection.send(JSON.stringify({"type": "request", "request": "update"}));
     showUpdateModal();
+});
+
+document.getElementById("beampaintInstallButton").addEventListener("click", () => {
+    if (!server_data["beampaint_installed"]) {
+        connection.send(JSON.stringify({"type": "beampaint", "action": "install"}));
+        showToast("info", "Installing BeamPaint.");
+    }
+});
+
+document.getElementById("beampaintDeleteButton").addEventListener("click", () => {
+    if (server_data["beampaint_installed"]) {
+        connection.send(JSON.stringify({"type": "beampaint", "action": "uninstall"}));
+        showToast("info", "Uninstalling BeamPaint.");
+    }
 });
 
 document.getElementById("settingModalButton").addEventListener("click", (event) => {
