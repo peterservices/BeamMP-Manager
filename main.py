@@ -82,6 +82,7 @@ VT_KEY = os.getenv("VT_KEY")
 
 app = Quart(__name__)
 app.secret_key = SECRET_KEY
+app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
 
 QuartAuth(app, duration=30 * 24 * 60 * 60)
 
@@ -113,7 +114,7 @@ else:
 persistent_data = PersistentData()
 if configuration.persist_data:
     if not os.path.exists("persistent_data.json"):
-        to_write = configuration.model_dump_json(indent=4)
+        to_write = persistent_data.model_dump_json(indent=4)
         with open("persistent_data.json", "x") as file:
             file.write(to_write)
     else:
@@ -163,12 +164,28 @@ async def run_command(command_str: str) -> None:
     server_data.process.stdin.write(command)
     await server_data.process.stdin.drain()
 
+def detect_deep_changes(new: Any, old: Any) -> bool:
+    """
+    Detects changes within any nested data structures.
+    """
+    if new != old:
+        return True
+    if isinstance(new, list | tuple):
+        for i, item in enumerate(new):
+            if detect_deep_changes(item, old[i]):
+                return True
+    elif isinstance(new, dict):
+        for key, item in new.items():
+            if detect_deep_changes(item, old[key]):
+                return True
+    return False
+
 async def send_changed_data(old_data: ServerData, old_settings: ServerSettings | None = None) -> None:
     changes = {}
     server_data_dict = server_data.model_dump()
     old_data_dict = old_data.model_dump()
     for key in old_data_dict:
-        if server_data_dict[key] != old_data_dict[key]:
+        if detect_deep_changes(server_data_dict[key], old_data_dict[key]):
             changes[key] = server_data_dict[key]
     if len(changes) != 0:
         await broker.event(changes)
@@ -229,8 +246,8 @@ async def update_release_cache() -> bool:
         connector = aiohttp.TCPConnector(resolver=resolver)
     else:
         connector = None
-    async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.get(BEAMMP_GITHUB_RELEASE) as response:
+    async with aiohttp.ClientSession(connector=connector) as client_session:
+        async with client_session.get(BEAMMP_GITHUB_RELEASE) as response:
             if response.status < 200 or response.status >= 300:
                 return False
             response_json: dict[str, Any] = await response.json()
@@ -254,6 +271,8 @@ def user_has_permissions(user: AuthUser, permissions: list) -> bool:
     if not configuration.require_login:
         return True # Without a login requirement, the user is assumed to have full permissions.
     auth_id = int(user.auth_id)
+    if auth_id not in configuration.authorized_discord_users:
+        return False
     for permission in permissions:
         if permission not in configuration.authorized_discord_users.get(auth_id).permissions:
             return False
@@ -287,6 +306,17 @@ async def start_server() -> None:
         server_data.beampaint_installed = await aioos.path.exists("Resources/Server/BeamPaintUpdater/")
         await send_changed_data(old_data)
 
+async def stop_server() -> None:
+    """
+    Stop the BeamMP Server.
+    """
+    server_data.process.terminate()
+    try:
+        await asyncio.wait_for(server_data.process.communicate(), timeout=5) # Ensure the executable is actually closed
+    except TimeoutError:
+        logger.exception("Server executable failed to exit in time")
+        server_data.process.kill() # Kill the server if it exceeded the timeout
+
 async def write_config() -> None:
     """
     Write the configuration to disk asynchronously.
@@ -303,10 +333,9 @@ def authorization_required(required_permissions: list[str] = []):
         @wraps(func)
         @login_required
         async def login_wrapper(*args, **kwargs):
-            if int(current_user.auth_id) not in configuration.authorized_discord_users:
-                raise Unauthorized()
-
             if not user_has_permissions(current_user, required_permissions):
+                if int(current_user.auth_id) not in configuration.authorized_discord_users:
+                    raise Unauthorized()
                 return abort(403)
 
             return await current_app.ensure_async(func)(*args, **kwargs)
@@ -380,7 +409,6 @@ async def oauth_login():
     if not configuration.require_login:
         return abort(404)
     session.permanent = True
-    app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
     session["error"] = "error"
 
     code = request.args.get("code")
@@ -450,7 +478,7 @@ async def get_mod_file(filename: str):
             return abort(403)
     path = safe_join("Resources/Client/", filename)
     if path is None or (path is not None and not await aioos.path.exists(path)):
-        if not authenticated:
+        if not authorized:
             return abort(404)
         path = safe_join("Resources/Client.disabled/", filename)
 
@@ -490,7 +518,7 @@ async def get_mod_file(filename: str):
             response = Response(partial_gen(), status=206, headers={
                 "Content-Type": "application/zip",
                 "Content-Disposition": f'attachment; filename="{filename}"',
-                "Content-Length": str(chunk_size),
+                "Content-Length": str(requested_chunk_size),
                 "Content-Range": f"bytes {start}-{end}/{file_size}",
                 "Accept-Ranges": "bytes",
             })
@@ -528,18 +556,18 @@ def check_zip_sync(path) -> bool:
         valid = False
     return valid
 
-def detect_zip_levels(path) -> str | None:
+def detect_zip_levels(path) -> list[str] | None:
     """
     Search for level information files, and returns the path if found.
     """
-    filename = None
+    filenames: list[str] = []
     with zipfile.ZipFile(path) as zip:
         filelist = zip.filelist
     for file in filelist:
         # Search for map info files (levelname/info.json is the more modern format, and levelname/levelname.mis is old but still used)
         if file.filename.startswith("levels/") and (file.filename.endswith("/info.json") or file.filename.endswith(".mis")):
-            filename = "/" + file.filename # Add a '/' to the beginning to match the correct format
-    return filename
+            filenames.append("/" + file.filename) # Add a '/' to the beginning to match the correct format
+    return filenames
 
 @app.route(f"{configuration.url_base_path}/upload", methods=["POST"])
 @authorization_required(["modify_mods"])
@@ -582,7 +610,7 @@ async def upload():
             return abort(415)
         if not filename.endswith(".zip") or len(filename) <= 4 or len(filename) > 24: # Make sure filename is long enough to contain a character and '.zip'
             return abort(400)
-        if filename in await aioos.listdir("Resources/Client/") or filename in await aioos.listdir("Resources/Client.disabled/"):
+        if await aioos.path.exists("Resources/Client/" + filename) or await aioos.path.exists("Resources/Client.disabled/" + filename):
             return abort(409)
 
         if total / (1024 * 1024 * 1024) >= 1: # Max 1 GiB
@@ -608,7 +636,7 @@ async def upload():
 
         to_write: bytes = chunk.read()
         if len(to_write) != end - start + 1:
-            return abort (400)
+            return abort(400)
 
         temp_files[filename].hasher.update(to_write)
         async with aiofiles.open(temp_path, "ab") as f:
@@ -682,11 +710,11 @@ async def upload():
 
             # Add the level path to the configuration, if enabled
             if configuration.detect_mod_maps:
-                level = await asyncio.to_thread(detect_zip_levels, temp_path)
-                if level is not None:
+                levels = await asyncio.to_thread(detect_zip_levels, temp_path)
+                if levels is not None:
                     async with state_lock:
                         old_data = snapshot_server_data()
-                        if await server_data.persistent_data.add_level_hash(mod_hash, level) and configuration.persist_data:
+                        if await server_data.persistent_data.add_level_hashes(mod_hash, levels) and configuration.persist_data:
                             await server_data.persistent_data.dump_and_write() # Write the changes to disk
                         await send_changed_data(old_data) # Update levels over websocket
 
@@ -780,12 +808,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     if server_executable_lock.locked():
                         return {"action": "restart", "success": False}
                     if server_data.process is not None and server_data.process.returncode is None:
-                        server_data.process.terminate()
+                        await stop_server()
                     await start_server()
                     return {"action": "restart"}
                 case "stop":
                     if server_data.process is not None:
-                        server_data.process.terminate()
+                        await stop_server()
                         async with state_lock:
                             reset_server_data()
                         return {"action": "stop"}
@@ -843,11 +871,11 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
 
                 # Add the level path to the configuration, if enabled
                 if configuration.detect_mod_maps:
-                    level = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
-                    if level is not None:
+                    levels = await asyncio.to_thread(detect_zip_levels, safe_join("Resources/Client/", ws_request["enable"]))
+                    if levels is not None:
                         async with state_lock:
                             old_data = snapshot_server_data()
-                            if await server_data.persistent_data.add_level_hash(mods[ws_request["enable"]]["hash"], level) and configuration.persist_data:
+                            if await server_data.persistent_data.add_level_hashes(mods[ws_request["enable"]]["hash"], levels) and configuration.persist_data:
                                 await server_data.persistent_data.dump_and_write() # Write the changes to disk and update over the websocket
                             await send_changed_data(old_data)
 
@@ -998,8 +1026,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         connector = aiohttp.TCPConnector(resolver=resolver)
                     else:
                         connector = None
-                    async with aiohttp.ClientSession(connector=connector) as session:
-                        async with session.get(file.download_url) as response:
+                    async with aiohttp.ClientSession(connector=connector) as client_session:
+                        async with client_session.get(file.download_url) as response:
                             if response.status < 200 or response.status >= 300:
                                 return {"action": "update", "success": False}
                             async with aiofiles.open(filepath, "wb") as file:
@@ -1007,12 +1035,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                                     await file.write(chunk)
                     async with server_executable_lock:
                         if server_data.process is not None and server_data.process.returncode is None:
-                            server_data.process.terminate()
-                            try:
-                                await asyncio.wait_for(server_data.process.communicate(), timeout=5) # Ensure the executable is closed so it can be deleted
-                            except TimeoutError:
-                                logger.exception("Server executable failed to exit in time")
-                                server_data.process.kill() # Kill the server if it exceeded the timeout
+                            await stop_server() # Ensure the executable is closed so it can be deleted
                         if await aioos.path.exists(configuration.beammp_executable_path):
                             try:
                                 await aioos.remove(configuration.beammp_executable_path)
@@ -1049,8 +1072,8 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         connector = aiohttp.TCPConnector(resolver=resolver)
                     else:
                         connector = None
-                    async with aiohttp.ClientSession(connector=connector) as session:
-                        async with session.get(BEAMPAINT_MAIN_LUA) as response:
+                    async with aiohttp.ClientSession(connector=connector) as client_session:
+                        async with client_session.get(BEAMPAINT_MAIN_LUA) as response:
                             if response.status < 200 or response.status >= 300:
                                 return {"action": "beampaint", "type": "install", "success": False}
                             async with aiofiles.open(filepath, "wb") as file:
@@ -1102,6 +1125,7 @@ async def receive() -> None:
 @app.websocket(f"{configuration.url_base_path}/ws")
 @authorization_required()
 async def websocket_connect():
+    task = None
     try:
         task = asyncio.ensure_future(receive())
         websockets.append(task)
@@ -1117,10 +1141,12 @@ async def websocket_connect():
                 break
             await websocket.send(data)
     finally:
-        websockets.remove(task)
-        if not task.done():
-            task.cancel()
-        await task
+        if task is not None:
+            if task in websockets:
+                websockets.remove(task)
+            if not task.done():
+                task.cancel()
+            await task
 
 # Redirect to login page if unauthorized
 @app.errorhandler(Unauthorized)
@@ -1286,8 +1312,10 @@ async def monitor_temp_files() -> None:
     """
     Delete temporary files if it has been over a minute since the last write.
     """
+    next_file_expiry = 0
     while True:
-        await asyncio.sleep(1)
+        await asyncio.sleep(next_file_expiry) # Only update as often as necessary
+        next_file_expiry = 60
         async with temp_files_lock:
             expired_items = []
             for filename, data in temp_files.items():
@@ -1296,6 +1324,10 @@ async def monitor_temp_files() -> None:
                     if await aioos.path.exists(path):
                         await aioos.remove(path)
                     expired_items.append(filename)
+                elif data.last_write is not None:
+                    expires_in = (data.last_write + datetime.timedelta(minutes=1) - datetime.datetime.now()).seconds
+                    if expires_in < next_file_expiry:
+                        next_file_expiry = expires_in
             for filename in expired_items:
                 del temp_files[filename]
 
@@ -1322,10 +1354,10 @@ async def startup():
         await aioos.remove(configuration.beammp_executable_path + ".temp")
     if await aioos.path.exists("Resources/Server/BeamPaintUpdater/main.lua.temp"):
         await aioos.remove("Resources/Server/BeamPaintUpdater/main.lua.temp")
-    if "mods.json" not in await aioos.listdir("Resources/Client/"):
+    if not await aioos.path.exists("Resources/Client/mods.json"):
         async with aiofiles.open("Resources/Client/mods.json", "w") as file:
             await file.write(json.dumps(None))
-    if "mods.json" not in await aioos.listdir("Resources/Client.disabled/"):
+    if not await aioos.path.exists("Resources/Client.disabled/mods.json"):
         async with aiofiles.open("Resources/Client.disabled/mods.json", "w") as file:
             await file.write(json.dumps(None))
 
