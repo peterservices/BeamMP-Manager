@@ -86,7 +86,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
     "virustotal_scanning": true
 }
 ```
-**authorized_users** - An array of Discord user IDs who will be able to login to the web manager. Each Discord user ID has an array that has a `permissions` list. The possible permissions a user can have are `modify_settings`, `modify_mods`, `manage_server`, `clear_logs`, and `configure`.
+**authorized_discord_users** - An array of Discord user IDs who will be able to login to the web manager. Each Discord user ID has an array that has a `permissions` list. The possible permissions a user can have are `modify_settings`, `modify_mods`, `manage_server`, `clear_logs`, and `configure`.
 
 **beammp_executable_path** - The path to your BeamMP Server executable. This should be located within the same directory as main.py.
 
