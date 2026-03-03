@@ -85,23 +85,25 @@ class PersistentData(BaseModel):
                         for mod_hash in value.copy():
                             if mod_hash not in hashes:
                                 value.remove(mod_hash)
+                                changes = True
                         if len(value) == 0:
                             del self.levels[key]
                             changes = True
         return changes
 
-    async def add_level_hash(self: Self, file_hash: str, level: str) -> bool:
+    async def add_level_hashes(self: Self, file_hash: str, levels: list[str]) -> bool:
         """
         Add a file hash and it's level. Returns whether any changes were made.
         """
         changes = False
         async with self.lock:
-            if level in self.levels and file_hash not in self.levels[level]:
-                self.levels[level].append(file_hash)
-                changes = True
-            elif level not in self.levels:
-                self.levels[level] = [file_hash]
-                changes = True
+            for level in levels:
+                if level in self.levels and self.levels[level] is not None and file_hash not in self.levels[level]:
+                    self.levels[level].append(file_hash)
+                    changes = True
+                elif level not in self.levels:
+                    self.levels[level] = [file_hash]
+                    changes = True
         return changes
 
     async def remove_level_hash(self: Self, file_hash: str) -> bool:
