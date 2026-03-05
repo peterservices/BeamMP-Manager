@@ -1219,6 +1219,10 @@ async def process_new_lines(new_lines: list[str]) -> None:
                 elif data[2] == "[ERROR]":
                     if "bind() failed: Address already in use" in line:
                         server_data.error = True
+                elif data[2] == "[WARN]":
+                    pass
+                elif data[2] == "[LUA]" or data[2] == "[LUA" and data[3] == "WARN]":
+                    pass # Server-side mods can trigger these log types
                 elif data[2] == "[CHAT]":
                     if data[3] == "<Server>":
                         sender = data[3].removeprefix("<").removesuffix(">")
@@ -1230,8 +1234,6 @@ async def process_new_lines(new_lines: list[str]) -> None:
                         receiver = "everyone"
                         message = " ".join(data[5:])
                     server_data.persistent_data.logs.append({"type": "message", "sender": sender, "receiver": receiver, "message": message, "timestamp": " ".join(data[0:2])})
-                elif data[2] == "[LUA]" or data[2] == "[LUA" and data[3] == "WARN]":
-                    pass # Server-side mods can trigger these log types
                 else:
                     logger.warning(f"Invalid log type {data[2]}")
             elif "::" in data[0]:
