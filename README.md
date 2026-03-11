@@ -8,7 +8,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 ### **Prerequisites**
 
 * Be able to run a standalone [BeamMP Server](https://github.com/BeamMP/BeamMP-Server)
-* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications). You can skip this prerequisite if you don't plan to expose the server to the public internet.
+* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications)*. You can skip this prerequisite if you don't plan to expose the server to the public internet.
 * Install [uv](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2) OR a standalone compatible Python version
   * [uv] Install a compatible version of Python using the terminal (ex: `uv python install 3.13`)
 * [Optional] Have a [VirusTotal](https://www.virustotal.com) API key
@@ -19,9 +19,11 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * Install dependencies (With uv: Use uv in the terminal. ex: `uv sync`)
 * Download or compile a [BeamMP Server](https://github.com/BeamMP/BeamMP-Server) executable, and put it in the same directory as BeamMP-Manager
 * Copy the contents of `.env.example` and create a file named `.env`
-  * Add your Discord App's client ID and client secret, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
-* Run the web server in the terminal with `.venv/bin/python -m hypercorn --bind 0.0.0.0:30815 main.py` (Replace 30815 with whatever port you prefer that is port-forwarded)
+  * Add your Discord App's client ID and client secret*, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
+* Run the web server in the terminal with `.venv/bin/python -m hypercorn --bind 0.0.0.0:30815 main.py` (Replace 30815 with whatever port you prefer that is port-forwarded*)
   * Edit the `config.json` (See [configuring](#configuring))
+
+\* = Not required if using locally with `require_login` config variable set to `false`
 
 ### **Features**
 
@@ -33,11 +35,10 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * Upload mods
   * Disable mods
   * Delete mods
-  * Automatically install/uninstall server-side mods such as BeamPaint
 * Player Management
   * View online players
   * Kick players
-* Manage server settings
+* Manage Server Settings
   * View and change server settings
   * Automatically detect maps in mods you upload
   * Autofilled options to change the map setting to
@@ -46,12 +47,14 @@ A configurable web-based manager for your BeamMP server using Discord as authent
   * Log when players finish downloading mods from the server
   * Log chat messages
   * Logs save across server restarts
-* And More
+* Server Management
   * Update server binary
-  * User permission levels to manage dashboard access
+  * Install/uninstall server-side mods such as BeamPaint
+* And More
   * Restart server
   * Manually reload mods
   * Send chat messages as the server
+  * User permission levels to manage dashboard access
 
 ### **Planned Features**
 
