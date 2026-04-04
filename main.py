@@ -623,14 +623,18 @@ async def upload():
         if start == 0:
             if filename in temp_files:
                 return abort(409)
-
             temp_files[filename] = TempFile(total_bytes=total, user=current_user.auth_id)
-        elif filename in temp_files and temp_files[filename].user != current_user.auth_id:
-            return abort(403)
-        elif filename not in temp_files or temp_files[filename].total_bytes != total or temp_files[filename].expected_next_byte != start or end >= total:
+        elif filename not in temp_files:
             return abort(400)
-        elif filename in temp_files and temp_files[filename].complete:
-            return abort(409)
+
+    async with temp_files[filename].lock:
+        if start != 0:
+            if temp_files[filename].user != current_user.auth_id:
+                return abort(403)
+            if temp_files[filename].total_bytes != total or temp_files[filename].expected_next_byte != start or end >= total:
+                return abort(400)
+            if temp_files[filename].complete:
+                return abort(409)
 
         temp_files[filename].last_write = datetime.datetime.now()
 
@@ -676,7 +680,8 @@ async def upload():
                         bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
                         if total == 0 or bad / total > 0.25:
                             await aioos.remove(temp_path)
-                            del temp_files[filename]
+                            async with temp_files_lock:
+                                del temp_files[filename]
                             return abort(422) # Refuse to upload the file if the file is too suspicious
                     except vt.error.APIError as error:
                         if error.code == "NotFoundError":
@@ -688,12 +693,14 @@ async def upload():
                                     vt_file = await client.get_object_async(f"/files/{mod_hash}")
                                 except vt.error.APIError as error:
                                     await aioos.remove(temp_path)
-                                    del temp_files[filename]
+                                    async with temp_files_lock:
+                                        del temp_files[filename]
                                     raise error
 
                                 if vt_file.error is not None:
                                     await aioos.remove(temp_path)
-                                    del temp_files[filename]
+                                    async with temp_files_lock:
+                                        del temp_files[filename]
                                     return abort(500)
 
                                 analysis_stats = vt_file.last_analysis_stats
@@ -701,11 +708,13 @@ async def upload():
                                 bad = analysis_stats["malicious"] + analysis_stats["suspicious"]
                                 if total == 0 or bad / total > 0.25:
                                     await aioos.remove(temp_path)
-                                    del temp_files[filename]
+                                    async with temp_files_lock:
+                                        del temp_files[filename]
                                     return abort(422) # Refuse to upload the file if the file is too suspicious
                         else:
                             await aioos.remove(temp_path)
-                            del temp_files[filename]
+                            async with temp_files_lock:
+                                del temp_files[filename]
                             raise error
 
             # Add the level path to the configuration, if enabled
@@ -720,7 +729,8 @@ async def upload():
 
             final_path = safe_join("Resources/Client/", filename)
             shutil.move(temp_path, final_path)
-            del temp_files[filename]
+            async with temp_files_lock:
+                del temp_files[filename]
             await run_command("reloadmods")
             return Response(filename, 201)
 
@@ -1321,14 +1331,14 @@ async def monitor_temp_files() -> None:
         async with temp_files_lock:
             expired_items = []
             for filename, data in temp_files.items():
-                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now():
+                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now() and not data.lock.locked():
                     path = safe_join("Resources/Client.temp/", filename + ".part")
                     if await aioos.path.exists(path):
                         await aioos.remove(path)
                     expired_items.append(filename)
                 elif data.last_write is not None:
                     expires_in = (data.last_write + datetime.timedelta(minutes=1) - datetime.datetime.now()).seconds
-                    if expires_in < next_file_expiry:
+                    if expires_in < next_file_expiry and expires_in >= 0:
                         next_file_expiry = expires_in
             for filename in expired_items:
                 del temp_files[filename]
