@@ -3,12 +3,12 @@
 A configurable web-based manager for your BeamMP server using Discord as authentication.
 
 > [!IMPORTANT]
-> This script is intended for managing a BeamMP server on a remote server. It is recommended to configure this behind a reverse proxy such as [Nginx](https://nginx.org/).
+> This script is intended for managing a BeamMP server on a remote server. It is recommended to configure this behind a reverse proxy such as [Nginx](https://nginx.org/), unless you are not exposin.
 
 ### **Prerequisites**
 
 * Be able to run a standalone [BeamMP Server](https://github.com/BeamMP/BeamMP-Server)
-* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications)*. You can skip this prerequisite if you don't plan to expose the server to the public internet.
+* Have the client ID and client secret of your [Discord App/Bot](https://discord.com/developers/applications)*. You can skip this prerequisite if you don't plan to expose the manager to the public internet.
 * Install [uv](https://docs.astral.sh/uv/getting-started/installation/#__tabbed_1_2) OR a standalone compatible Python version
   * [uv] Install a compatible version of Python using the terminal (ex: `uv python install 3.13`)
 * [Optional] Have a [VirusTotal](https://www.virustotal.com) API key
@@ -23,7 +23,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 * Run the web server in the terminal with `.venv/bin/python -m hypercorn --bind 0.0.0.0:30815 main.py` (Replace 30815 with whatever port you prefer that is port-forwarded*)
   * Edit the `config.json` (See [configuring](#configuring))
 
-\* = Not required if using locally with `require_login` config variable set to `false`
+\* = Not required if only exposing locally with `require_login` config variable set to `false`
 
 ### **Features**
 
@@ -106,11 +106,11 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 **public_dashboard** - Whether the public mod dashboard is enabled. If disabled, the guest login button and associated pages will be disabled.
 
 > [!CAUTION]
->  You should never disable **require_login** unless the server is not exposed to the public internet, and you trust everyone on your network.
+>  You should never disable **require_login** unless the server is not exposed to the public internet and you trust everyone on your network.
 
-**require_login** - Whether users must login to access the dashboard. When disabled, anyone with access will have full permissions.
+**require_login** - Whether users must login to access the dashboard. When disabled, anyone with network access will have full permissions.
 
-**url_base_path** - The base path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just leave this empty.
+**url_base_path** - The base URL path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just leave this empty.
 
 **virustotal_scanning** - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
 
