@@ -196,6 +196,8 @@ class TempFile(BaseModel):
     """
     A model representing a temporary file during download.
     """
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     @staticmethod
     def _validate_hash_obj(obj: object) -> object:
         """
@@ -209,6 +211,7 @@ class TempFile(BaseModel):
     total_bytes: int
     user: str
     hasher: Annotated[object, AfterValidator(_validate_hash_obj)] = Field(default_factory=hashlib.sha256)
+    lock: asyncio.Lock = Field(default_factory=asyncio.Lock)
     expected_next_byte: int = 0
     complete: bool = False
     last_write: datetime.datetime | None = None
