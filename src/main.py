@@ -9,6 +9,7 @@ import re
 import shutil
 import signal
 import stat
+import sys
 import zipfile
 from functools import wraps
 from secrets import token_urlsafe
@@ -59,6 +60,8 @@ from models import (
 logging.basicConfig(level=logging.DEBUG, format="[BeamMP Manager] [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
+BASE_PATH = sys._MEIPASS if hasattr(sys, "_MEIPASS") else os.getcwd()
+
 BEAMPAINT_MAIN_LUA = "https://cdn.beampaint.com/api/v2/download/release/updater/main.lua"
 BEAMMP_GITHUB_RELEASE = "https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest"
 
@@ -80,7 +83,7 @@ if SECRET_KEY is None or len(SECRET_KEY) == 0:
 
 VT_KEY = os.getenv("VT_KEY")
 
-app = Quart(__name__)
+app = Quart(__name__, static_folder=os.path.join(BASE_PATH, "static"), template_folder=os.path.join(BASE_PATH, "templates"))
 app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
 
@@ -208,7 +211,7 @@ def reset_server_data() -> None:
     Reset server_data to its default state.
     """
     global server_data
-    server_data = ServerData(persistent_data=persistent_data)
+    server_data = ServerData(persistent_data=persistent_data, last_automatic_restart=server_data.last_automatic_restart)
 
 def reset_server_settings() -> None:
     """
@@ -447,9 +450,9 @@ async def get_static_file(folder: str, filename: str):
             return abort(404)
         if filename == "login.css" and not configuration.require_login:
             return abort(404)
-        path = safe_join("static/css/", filename)
+        path = safe_join(BASE_PATH, "static/css/", filename)
     elif folder == "images":
-        path = safe_join("static/images/", filename)
+        path = safe_join(BASE_PATH, "static/images/", filename)
     elif folder == "js":
         if filename not in ("guest_dashboard.js", "login.js"):
             if not authenticated:
@@ -460,7 +463,7 @@ async def get_static_file(folder: str, filename: str):
             return abort(404)
         if filename == "login.js" and not configuration.require_login:
             return abort(404)
-        path = safe_join("static/js/", filename)
+        path = safe_join(BASE_PATH, "static/js/", filename)
     else:
         return abort(404)
     if path is not None and await aioos.path.exists(path):
@@ -1321,8 +1324,8 @@ async def monitor_logs() -> None:
             server_data.error = True
             await send_changed_data(old_data)
 
-            # Start the server again if has been 5 or more minutes since last restart and setting is enabled
-            if configuration.restart_on_error and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
+            # Start the server again if has been 5 or more minutes since last restart, the returncode is not a system interrupt, and the setting is enabled
+            if configuration.restart_on_error and server_data.process.returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
                 server_data.last_automatic_restart = datetime.datetime.now()
                 async with server_executable_lock:
                     await start_server()
@@ -1400,5 +1403,6 @@ def close_sockets(*_):
 
 signal.signal(signal.SIGINT, close_sockets)
 signal.signal(signal.SIGTERM, close_sockets)
+signal.signal(signal.SIGTSTP, close_sockets)
 
 # By @peterservices
