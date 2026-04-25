@@ -817,9 +817,10 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                 case "restart":
                     if server_executable_lock.locked():
                         return {"action": "restart", "success": False}
-                    if server_data.process is not None and server_data.process.returncode is None:
-                        await stop_server()
-                    await start_server()
+                    async with server_executable_lock:
+                        if server_data.process is not None and server_data.process.returncode is None:
+                            await stop_server()
+                        await start_server()
                     return {"action": "restart"}
                 case "stop":
                     if server_data.process is not None:
@@ -1319,6 +1320,12 @@ async def monitor_logs() -> None:
                 reset_server_data()
             server_data.error = True
             await send_changed_data(old_data)
+
+            # Start the server again if has been 5 or more minutes since last restart and setting is enabled
+            if configuration.restart_on_error and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
+                server_data.last_automatic_restart = datetime.datetime.now()
+                async with server_executable_lock:
+                    await start_server()
 
 async def monitor_temp_files() -> None:
     """

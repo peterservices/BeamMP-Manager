@@ -35,6 +35,7 @@ class LocalConfiguration(BaseModel):
     preserve_setting_changes: bool = True
     public_dashboard: bool = True
     require_login: bool = True
+    restart_on_error: bool = True
     url_base_path: str = "/beammp"
     virustotal_scanning: bool = True
 
@@ -151,6 +152,7 @@ class ServerData(BaseModel):
     connected: bool = False
     started: bool = False
     error: bool = False
+    last_automatic_restart: datetime.datetime | None = None
     version: str | None = None
     lua_version: str | None = None
     port: int | None = None
