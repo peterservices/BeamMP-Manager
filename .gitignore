@@ -1,5 +1,7 @@
 __pycache__
 .env
+build
+dist
 config.json
 persistent_data.json
 Resources
