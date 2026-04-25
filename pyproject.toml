@@ -15,6 +15,11 @@ dependencies = [
     "vt-py==0.22.0",
 ]
 
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.20.0",
+]
+
 [tool.ruff.lint]
 extend-select = [
     "F",
