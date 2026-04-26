@@ -6,8 +6,10 @@ on:
       - main
     tags:
       - "v*.*.*"
-    paths-ignore:
-      - '**.md'
+    paths:
+      - '!**.md'
+      - '!**.yml'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: write
