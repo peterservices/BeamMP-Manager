@@ -103,7 +103,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 ```
 **authorized_discord_users** - An array of Discord user IDs who will be able to login to the web manager. Each Discord user ID has an array that has a `permissions` list. The possible permissions a user can have are `modify_settings`, `modify_mods`, `manage_server`, `clear_logs`, and `configure`.
 
-**beammp_executable_path** - The path to your BeamMP Server executable. This should be located within the same directory as main.py.
+**beammp_executable_path** - The path to your BeamMP Server executable. This should be located within the base directory of the manager.
 
 **detect_mod_maps** - Whether uploaded mods are scanned for modded levels. If found, the level filepath will automatically be saved (if persist_data is enabled) and available in the settings dropdown.
 
