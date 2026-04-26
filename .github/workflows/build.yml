@@ -75,6 +75,7 @@ jobs:
         with:
           pattern: beammp_manager_*
           skip-decompress: true
+          merge-multiple: true
 
       - name: Upload to release
         uses: svenstaro/upload-release-action@v2
