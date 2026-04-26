@@ -73,7 +73,6 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v8
         with:
-          path: artifacts
           pattern: beammp_manager_*
           merge-multiple: true
 
@@ -82,7 +81,7 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file_glob: true
-          file: artifacts/beammp_manager_*
+          file: beammp_manager_*
           tag: ${{ github.ref }}
           draft: true
           overwrite: true
