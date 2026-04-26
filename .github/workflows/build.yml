@@ -51,7 +51,9 @@ jobs:
 
       - name: Zip directory
         working-directory: dist/beammp_manager
-        run: 7z a ${{ matrix.artifact_name }} *
+        run: |
+          7z a ${{ matrix.artifact_name }} *
+          7z a ${{ matrix.artifact_name }} .env.example
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
