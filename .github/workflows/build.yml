@@ -17,12 +17,12 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            artifact_name: beammp_manager_ubuntu.zip
-            asset_name: beammp_manager_ubuntu
           - os: windows-latest
             artifact_name: beammp_manager_windows.zip
             asset_name: beammp_manager_windows
+          - os: ubuntu-latest
+            artifact_name: beammp_manager_ubuntu.zip
+            asset_name: beammp_manager_ubuntu
     runs-on: ${{ matrix.os }}
 
     env:
@@ -63,36 +63,26 @@ jobs:
           retention-days: 15
           overwrite: true
           archive: false
-      
-      - name: Get current release
-        if: startsWith(github.ref, 'refs/tags/')
-        id: get_current_release
-        continue-on-error: true
-        uses: joutvhu/get-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload to new release
-        if: startsWith(github.ref, 'refs/tags/') && steps.get_current_release.outcome == 'failure'
+  release:
+    runs-on: windows-latest
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          pattern: beammp_manager_*
+          merge-multiple: true
+
+      - name: Upload to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/beammp_manager/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}_${{ github.ref_name }}.zip
+          file_glob: true
+          file: artifacts/beammp_manager_*
           tag: ${{ github.ref }}
-          draft: true
-          overwrite: true
-
-      - name: Upload to existing release
-        if: startsWith(github.ref, 'refs/tags/') && steps.get_current_release.outcome == 'success'
-        uses: svenstaro/upload-release-action@v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: dist/beammp_manager/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}_${{ github.ref_name }}.zip
-          tag: ${{ github.ref }}
-          release_id: ${{ steps.get_current_release.outputs.id }}
           draft: true
           overwrite: true
