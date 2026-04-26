@@ -73,6 +73,11 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 * Enhanced event logging (Server start/stop, dashboard logins, etc.)
 * More methods of authentication (Google)
 * Option to not automatically start the server (Maybe a process-detached read-only mode?)
+
+### **Screenshots**
+
+![Main dashboard](assets/dashboard_main.png)
+![Mods dashboard](assets/dashboard_mods.png)
  
 ### **Configuring**
 
