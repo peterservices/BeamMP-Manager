@@ -13,7 +13,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 
 ### **Installation Option 1 (Windows and Ubuntu)**
 
-* Download and unzip the [latest release](https://github.com/peterservices/BeamMP-Manager/releases/latest) (recommended) or [development build](https://github.com/peterservices/BeamMP-Manager/actions/workflows/build.yml)
+* Download and unzip the [latest release](https://github.com/peterservices/BeamMP-Manager/releases/latest) (recommended) or [development build](https://github.com/peterservices/BeamMP-Manager/actions/workflows/build.yml) that matches your OS version and architecture
 * Download or compile a [BeamMP Server](https://github.com/BeamMP/BeamMP-Server) executable, and put it in the same directory as BeamMP-Manager
 * Copy the contents of `.env.example` and create a file named `.env`
   * Add your Discord App's client ID and client secret*, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
