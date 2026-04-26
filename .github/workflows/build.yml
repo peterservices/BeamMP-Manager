@@ -18,11 +18,16 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            artifact_name: beammp_manager_windows.zip
-            asset_name: beammp_manager_windows
-          - os: ubuntu-latest
-            artifact_name: beammp_manager_ubuntu.zip
-            asset_name: beammp_manager_ubuntu
+            asset_name: beammp_manager_windows_x64
+          - os: ubuntu-24.04
+            asset_name: beammp_manager_ubuntu_24_x64
+          - os: ubuntu-22.04
+            asset_name: beammp_manager_ubuntu_22_x64
+          - os: ubuntu-24.04-arm
+            asset_name: beammp_manager_ubuntu_24_arm64
+          - os: ubuntu-22.04-arm
+            asset_name: beammp_manager_ubuntu_22_arm64
+          
     runs-on: ${{ matrix.os }}
 
     env:
@@ -52,14 +57,14 @@ jobs:
       - name: Zip directory
         working-directory: dist/beammp_manager
         run: |
-          7z a ${{ matrix.artifact_name }} *
-          7z a ${{ matrix.artifact_name }} .env.example
+          7z a ${{ matrix.asset_name }}.zip *
+          7z a ${{ matrix.asset_name }}.zip .env.example
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/beammp_manager/${{ matrix.artifact_name }}
+          name: ${{ matrix.asset_name }}.zip
+          path: dist/beammp_manager/${{ matrix.asset_name }}.zip
           retention-days: 15
           overwrite: true
           archive: false
