@@ -9,6 +9,7 @@ import re
 import shutil
 import signal
 import stat
+import subprocess
 import sys
 import zipfile
 from functools import wraps
@@ -307,7 +308,8 @@ async def start_server() -> None:
         reset_server_data()
         if await aioos.path.exists(configuration.beammp_executable_path):
             try:
-                server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE)
+                flags = 0 if sys.platform != "win32" else subprocess.CREATE_NO_WINDOW # Prevent terminal input hijacking on Windows
+                server_data.process = await asyncio.subprocess.create_subprocess_exec(configuration.beammp_executable_path, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL, stdin=asyncio.subprocess.PIPE, creationflags=flags)
                 server_data.started = True
             except (PermissionError, OSError):
                 server_data.error = True
@@ -1412,16 +1414,19 @@ async def main():
     config = Config()
     config.bind = ["0.0.0.0:" + MANAGER_PORT]
 
-    shutdown_event = asyncio.Event()
-    def on_signal():
-        close_sockets()
-        shutdown_event.set()
+    shutdown_trigger = None
+    if sys.platform != "win32": # asyncio does not support handling signals on Windows
+        shutdown_event = asyncio.Event()
+        shutdown_trigger = shutdown_event.wait
+        def on_signal():
+            close_sockets()
+            shutdown_event.set()
 
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGINT, on_signal)
-    loop.add_signal_handler(signal.SIGTERM, on_signal)
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGINT, on_signal)
+        loop.add_signal_handler(signal.SIGTERM, on_signal)
 
-    await serve(app, config, shutdown_trigger=shutdown_event.wait)
+    await serve(app, config, shutdown_trigger=shutdown_trigger)
 
 if __name__ == "__main__":
     asyncio.run(main())
