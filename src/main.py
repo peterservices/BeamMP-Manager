@@ -22,6 +22,8 @@ import discordoauth2
 import tomlkit
 import vt
 from dotenv import find_dotenv, load_dotenv, set_key
+from hypercorn.asyncio import serve
+from hypercorn.config import Config
 from quart import (
     Quart,
     Response,
@@ -74,6 +76,10 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+
+MANAGER_PORT = os.getenv("MANAGER_PORT")
+if MANAGER_PORT is None or len(MANAGER_PORT) == 0:
+    raise KeyError("The MANAGER_PORT environment variable is required but missing")
 
 SECRET_KEY = os.getenv("SECRET_KEY")
 if SECRET_KEY is None or len(SECRET_KEY) == 0:
@@ -1318,6 +1324,7 @@ async def monitor_logs() -> None:
                     logger.debug(f"Processed {len(new_lines)} new lines")
         elif server_data.process is not None:
             logger.error("BeamMP server exited with returncode %s", server_data.process.returncode)
+            returncode = server_data.process.returncode
             old_data = snapshot_server_data()
             async with state_lock:
                 reset_server_data()
@@ -1325,7 +1332,7 @@ async def monitor_logs() -> None:
             await send_changed_data(old_data)
 
             # Start the server again if has been 5 or more minutes since last restart, the returncode is not a system interrupt, and the setting is enabled
-            if configuration.restart_on_error and server_data.process.returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
+            if configuration.restart_on_error and returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
                 server_data.last_automatic_restart = datetime.datetime.now()
                 async with server_executable_lock:
                     await start_server()
@@ -1401,10 +1408,22 @@ async def shutdown():
 def close_sockets(*_):
     asyncio.create_task(broker.event(None))
 
-signal.signal(signal.SIGINT, close_sockets)
-signal.signal(signal.SIGTERM, close_sockets)
+async def main():
+    config = Config()
+    config.bind = ["0.0.0.0:" + MANAGER_PORT]
 
-if sys.platform != "win32": # Windows does not support SIGTSTP
-    signal.signal(signal.SIGTSTP, close_sockets)
+    shutdown_event = asyncio.Event()
+    def on_signal():
+        close_sockets()
+        shutdown_event.set()
+
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, on_signal)
+    loop.add_signal_handler(signal.SIGTERM, on_signal)
+
+    await serve(app, config, shutdown_trigger=shutdown_event.wait)
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 # By @peterservices
