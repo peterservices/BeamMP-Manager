@@ -74,7 +74,7 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: beammp_manager_*
-          merge-multiple: true
+          skip_decompress: true
 
       - name: Upload to release
         uses: svenstaro/upload-release-action@v2
