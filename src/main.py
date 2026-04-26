@@ -1403,6 +1403,8 @@ def close_sockets(*_):
 
 signal.signal(signal.SIGINT, close_sockets)
 signal.signal(signal.SIGTERM, close_sockets)
-signal.signal(signal.SIGTSTP, close_sockets)
+
+if sys.platform != "win32": # Windows does not support SIGTSTP
+    signal.signal(signal.SIGTSTP, close_sockets)
 
 # By @peterservices
