@@ -33,7 +33,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     env:
-      MAIN_PY_FILE: 'src/run.py'
+      MAIN_PY_FILE: 'src/main.py'
 
     steps:
       - name: Checkout code
