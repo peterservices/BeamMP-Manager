@@ -31,7 +31,7 @@ function createModDiv(modName, filesize) {
     let heading = document.createElement("h4");
     heading.className = "text-truncate"
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;"
-    heading.innerHTML = modName;
+    heading.textContent = modName;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", modName);
     new bootstrap.Tooltip(heading);

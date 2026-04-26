@@ -101,7 +101,7 @@ function showToast(type, text) {
 
     const toastBody = document.createElement("div");
     toastBody.className = referenceToast.children[0].children[0].className;
-    toastBody.innerHTML = ((text !== null) ? text : referenceToast.children[0].children[0].innerHTML);
+    toastBody.textContent = ((text !== null) ? text : referenceToast.children[0].children[0].textContent);
     toastFlex.appendChild(toastBody);
 
     const toastButton = document.createElement("button");
@@ -123,7 +123,7 @@ function showToast(type, text) {
 }
 
 function showUploadModal() {
-    uploadModalButton.innerHTML = "Upload";
+    uploadModalButton.textContent = "Upload";
     uploadModalButton.disabled = false;
     formFilename.value = null;
     formFile.value = null;
@@ -135,7 +135,7 @@ function showClearModal() {
 }
 
 function showKickModal(playerName) {
-    kickModalLabel.innerHTML = "Kick " + playerName;
+    kickModalLabel.textContent = "Kick " + playerName;
     kickReason.value = null;
     kickModalBS.show();
 }
@@ -146,7 +146,7 @@ function showMessageModal() {
 }
 
 function showDeleteModal(modName) {
-    deleteModalLabel.innerHTML = "Delete " + modName;
+    deleteModalLabel.textContent = "Delete " + modName;
     deleteModalBS.show();
 }
 
@@ -200,7 +200,7 @@ function showSettingModal() {
                 const bool_label = document.createElement("label");
                 bool_label.for = key;
                 bool_label.className = "form-check-label";
-                bool_label.innerHTML = key;
+                bool_label.textContent = key;
 
                 const bool_input = document.createElement("input");
                 bool_input.type = "checkbox";
@@ -224,7 +224,7 @@ function showSettingModal() {
                 const num_label = document.createElement("label");
                 num_label.for = key;
                 num_label.className = "form-label";
-                num_label.innerHTML = key;
+                num_label.textContent = key;
 
                 const num_input = document.createElement("input");
                 num_input.type = "number";
@@ -248,7 +248,7 @@ function showSettingModal() {
                     map_label.id = key + "label";
                     map_label.for = key;
                     map_label.className = "form-label";
-                    map_label.innerHTML = key;
+                    map_label.textContent = key;
 
                     const map_div = document.createElement("div");
                     map_div.className = "input-group";
@@ -259,14 +259,14 @@ function showSettingModal() {
                     map_button1.type = "button";
                     map_button1.setAttribute("data-bs-toggle", "dropdown");
                     map_button1.ariaExpanded = "false";
-                    map_button1.innerHTML = "Input Mode";
+                    map_button1.textContent = "Input Mode";
                     const map_button2 = document.createElement("button");
                     map_button2.id = key + "button2";
                     map_button2.className = "btn btn-outline-secondary dropdown-toggle";
                     map_button2.type = "button";
                     map_button2.setAttribute("data-bs-toggle", "dropdown");
                     map_button2.ariaExpanded = "false";
-                    map_button2.innerHTML = value;
+                    map_button2.textContent = value;
 
                     const map_input = document.createElement("input");
                     map_input.type = "text";
@@ -279,7 +279,7 @@ function showSettingModal() {
 
                     map_input.onchange = () => {
                         map_input.changed = map_input.value != value;
-                        map_button2.innerHTML = map_input.value;
+                        map_button2.textContent = map_input.value;
                         map_label.style = ((map_input.changed) ? "font-style: italic;" : "");
                     };
 
@@ -292,7 +292,7 @@ function showSettingModal() {
                     const map_dropdown_button = document.createElement("a");
                     map_dropdown_button.className = "dropdown-item";
                     map_dropdown_button.href = "#";
-                    map_dropdown_button.innerHTML = "Autofill";
+                    map_dropdown_button.textContent = "Autofill";
                     const map_dropdown_mode = document.createElement("li");
                     map_dropdown_mode.appendChild(map_dropdown_button);
                     map_dropdown_button.onclick = () => {
@@ -302,7 +302,7 @@ function showSettingModal() {
                     const map_manual_button = document.createElement("a");
                     map_manual_button.className = "dropdown-item";
                     map_manual_button.href = "#";
-                    map_manual_button.innerHTML = "Manual";
+                    map_manual_button.textContent = "Manual";
                     const map_manual_mode = document.createElement("li");
                     map_manual_mode.appendChild(map_manual_button);
                     map_manual_button.onclick = () => {
@@ -327,7 +327,7 @@ function showSettingModal() {
                     const str_label = document.createElement("label");
                     str_label.for = key;
                     str_label.className = "form-label";
-                    str_label.innerHTML = key;
+                    str_label.textContent = key;
 
                     const str_input = document.createElement("input");
                     str_input.type = "text";
@@ -386,7 +386,7 @@ function createModDiv(type, modName, filesize) {
     const heading = document.createElement("h4");
     heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
-    heading.innerHTML = modName;
+    heading.textContent = modName;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", modName);
     new bootstrap.Tooltip(heading);
@@ -441,7 +441,7 @@ function createModDiv(type, modName, filesize) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "btn " + ((type == "enabled") ? "disable-button" : "enable-button");
-        button.innerHTML = ((type == "enabled") ? "Disable" : "Enable");
+        button.textContent = ((type == "enabled") ? "Disable" : "Enable");
         aButton.appendChild(button);
 
         if (type == "disabled") {
@@ -487,7 +487,7 @@ function createPlayerDiv(playerName) {
     const heading = document.createElement("h4");
     heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
-    heading.innerHTML = playerName;
+    heading.textContent = playerName;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", playerName);
     new bootstrap.Tooltip(heading);
@@ -507,7 +507,7 @@ function createPlayerDiv(playerName) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "btn kick-button";
-        button.innerHTML = "Kick";
+        button.textContent = "Kick";
         aButton.appendChild(button);
     }
 
@@ -543,7 +543,7 @@ function createLogDiv(content, timestamp = null, tooltipContent = null, logType 
         throw Error("Expected logType of value 'standard' or 'divider', got '" + logType + "'");
     }
     heading.className = "text-truncate tooltip-parent";
-    heading.innerHTML = content;
+    heading.textContent = content;
     heading.setAttribute("data-bs-toggle", "tooltip");
     heading.setAttribute("data-bs-title", timestamp + tooltipContent);
     new bootstrap.Tooltip(heading);
@@ -569,7 +569,7 @@ function createUpdateDiv(file) {
     const heading = document.createElement("h6");
     heading.className = "text-truncate tooltip-parent";
     heading.style = "flex-grow: 1; overflow: hidden; white-space: nowrap; padding-bottom: 1%; padding-top: 1%;";
-    heading.innerHTML = "OS: " + file["platform"] + ", Arch: " + file["architecture"];
+    heading.textContent = "OS: " + file["platform"] + ", Arch: " + file["architecture"];
     heading.setAttribute("data-bs-toggle", "tooltip");
     const size = formatBytes(file["size"]);
     heading.setAttribute("data-bs-title", "BeamMP-Server." + file["platform"] + "." + file["architecture"] + " (" + size + ")");
@@ -588,7 +588,7 @@ function createUpdateDiv(file) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "btn enable-button";
-    button.innerHTML = "Update";
+    button.textContent = "Update";
     aButton.appendChild(button);
 
     return update;
@@ -677,16 +677,16 @@ function refreshServerStatus() {
     }
     // Update server connection text
     if (server_data["error"]) {
-        serverStatus.innerHTML = "Server Error";
+        serverStatus.textContent = "Server Error";
         serverStatus.style = "color: #FF0000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
     } else if (!server_data["started"]) {
-        serverStatus.innerHTML = "Server Offline";
+        serverStatus.textContent = "Server Offline";
         serverStatus.style = "color: #000000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
     } else if (!server_data["connected"]) {
-        serverStatus.innerHTML = "Server Starting";
+        serverStatus.textContent = "Server Starting";
         serverStatus.style = "color: #FFDE21; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
     } else {
-        serverStatus.innerHTML = "Server Online";
+        serverStatus.textContent = "Server Online";
         serverStatus.style = "color: #008000; background-color: #f3f3f3; border-radius: 50px; padding: 10px;";
     }
 }
@@ -831,12 +831,12 @@ function refreshMapDropdown(map_input, map_label, map_button2, map_dropdown2) {
         const map_path_button = document.createElement("a");
         map_path_button.className = "dropdown-item";
         map_path_button.href = "#";
-        map_path_button.innerHTML = levels[i];
+        map_path_button.textContent = levels[i];
         const map_path = document.createElement("li");
         map_path.appendChild(map_path_button);
         map_path_button.onclick = () => {
             map_input.value = levels[i];
-            map_button2.innerHTML = levels[i];
+            map_button2.textContent = levels[i];
 
             map_input.changed = map_input.value != value;
             map_label.style = ((map_input.changed) ? "font-style: italic;" : "");
@@ -854,18 +854,21 @@ function refreshUpdateModal(modalTitle, modalContent, update = null) {
     }
 
     if (update === null) {
-        modalTitle.innerHTML = "Checking for Update";
-        modalContent.innerHTML = "Please wait...";
+        modalTitle.textContent = "Checking for Update";
+        modalContent.textContent = "Please wait...";
     } else if (server_data["version"] == update["version"]) {
-        modalTitle.innerHTML = "No Update Available";
-        modalContent.innerHTML = "Server up-to-date!";
+        modalTitle.textContent = "No Update Available";
+        modalContent.textContent = "Server up-to-date!";
     } else {
         if (server_data["version"] == null) {
-            modalTitle.innerHTML = "Unable to fetch current server version. (Latest: " + update["version"] + ")";
+            modalTitle.textContent = "Unable to fetch current server version. (Latest: " + update["version"] + ")";
         } else {
-            modalTitle.innerHTML = "Update Available! (" + server_data["version"] + " -> " + update["version"] + ")";
+            modalTitle.textContent = "Update Available! (" + server_data["version"] + " -> " + update["version"] + ")";
         }
-        modalContent.innerHTML = "Detected system architecture: " + update["system_architecture"] + "<br><br>Select the update that matches your system below:";
+        modalContent.textContent = "Detected system architecture: " + update["system_architecture"];
+        modalContent.appendChild(document.createElement("br"));
+        modalContent.appendChild(document.createElement("br"));
+        modalContent.appendChild(document.createTextNode("Select the update that matches your system below:"));
     
         // Add files
         const files = update["files"];
@@ -1014,7 +1017,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function 
     event.preventDefault();
 
     uploadModalButton.disabled = true;
-    uploadModalButton.innerHTML = "0.00%";
+    uploadModalButton.textContent = "0.00%";
 
     const chunkSize = 10 * 1024 * 1024; // 10MB
     const file = formFile.files[0];
@@ -1044,7 +1047,7 @@ document.getElementById("uploadForm").addEventListener("submit", async function 
             });
 
             const progress = start / file.size * 100;
-            uploadModalButton.innerHTML = progress.toFixed(2) + "%";
+            uploadModalButton.textContent = progress.toFixed(2) + "%";
 
             if (response.status == 201) {
                 uploadModalBS.hide();
@@ -1119,11 +1122,11 @@ document.getElementById("kickForm").addEventListener("submit", (event) => {
     event.preventDefault();
     kickModalBS.hide();
     const kickReasonValue = ((kickReason.value == "") ? "Kicked by admin" : kickReason.value);
-    connection.send(JSON.stringify({"type": "command", "command": "kick", "player": kickModalLabel.innerHTML.split(" ")[1], "reason": kickReasonValue}));
+    connection.send(JSON.stringify({"type": "command", "command": "kick", "player": kickModalLabel.textContent.split(" ")[1], "reason": kickReasonValue}));
 });
 
 document.getElementById("deleteModalButton").addEventListener("click", () => {
-    const modName = deleteModalLabel.innerHTML.split(" ")[1];
+    const modName = deleteModalLabel.textContent.split(" ")[1];
     const deleteButton = document.getElementById(modName + "-delete-button");
     deleteButton.className = "disabled";
     deleteButton.children[0].disabled = true;
