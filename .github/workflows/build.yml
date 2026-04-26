@@ -8,6 +8,7 @@ on:
       - "v*.*.*"
     paths:
       - '!**.md'
+      - '!assets/**'
       - '!**.yml'
       - '.github/workflows/build.yml'
 
