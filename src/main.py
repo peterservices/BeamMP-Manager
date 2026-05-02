@@ -13,6 +13,7 @@ import subprocess
 import sys
 import zipfile
 from functools import wraps
+from pathlib import Path
 from secrets import token_urlsafe
 from typing import Any, Literal
 
@@ -63,7 +64,7 @@ from models import (
 logging.basicConfig(level=logging.DEBUG, format="[BeamMP Manager] [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-BASE_PATH = sys._MEIPASS if hasattr(sys, "_MEIPASS") else os.getcwd()
+BASE_PATH = sys._MEIPASS if hasattr(sys, "_MEIPASS") else str(Path.cwd())
 
 BEAMPAINT_MAIN_LUA = "https://cdn.beampaint.com/api/v2/download/release/updater/main.lua"
 BEAMMP_GITHUB_RELEASE = "https://api.github.com/repos/BeamMP/BeamMP-Server/releases/latest"
@@ -90,29 +91,29 @@ if SECRET_KEY is None or len(SECRET_KEY) == 0:
 
 VT_KEY = os.getenv("VT_KEY")
 
-app = Quart(__name__, static_folder=os.path.join(BASE_PATH, "static"), template_folder=os.path.join(BASE_PATH, "templates"))
+app = Quart(__name__, static_folder=Path(BASE_PATH).joinpath("static"), template_folder=Path(BASE_PATH).joinpath("templates"))
 app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
 
 QuartAuth(app, duration=30 * 24 * 60 * 60)
 
 configuration = LocalConfiguration()
-if not os.path.exists("config.json"):
+if not Path("config.json").exists():
     to_write = configuration.model_dump_json(indent=4)
-    with open("config.json", "x") as file:
+    with Path("config.json").open("x") as file:
         file.write(to_write)
 else:
-    with open("config.json") as file:
+    with Path("config.json").open() as file:
         config_str = file.read()
     configuration = LocalConfiguration.model_validate_json(config_str)
-    if configuration and os.path.exists(configuration.beammp_executable_path):
-        configuration.beammp_executable_path = os.path.abspath(configuration.beammp_executable_path)
+    if configuration and Path(configuration.beammp_executable_path).exists():
+        configuration.beammp_executable_path = Path(configuration.beammp_executable_path).resolve()
 
     # Save any new changes to disk
     json_data = configuration.model_dump_json(indent=4)
     if json_data != config_str:
         to_write = json_data
-        with open("config.json", "w") as file:
+        with Path("config.json").open("w") as file:
             file.write(to_write)
 
 if configuration.require_login:
@@ -123,12 +124,12 @@ else:
 
 persistent_data = PersistentData()
 if configuration.persist_data:
-    if not os.path.exists("persistent_data.json"):
+    if not Path("persistent_data.json").exists():
         to_write = persistent_data.model_dump_json(indent=4)
-        with open("persistent_data.json", "x") as file:
+        with Path("persistent_data.json").open("x") as file:
             file.write(to_write)
     else:
-        with open("persistent_data.json") as file:
+        with Path("persistent_data.json").open() as file:
             persistent_str = file.read()
         persistent_dict = json.loads(persistent_str)
         persistent_dict["lock"] = persistent_data.lock
@@ -138,7 +139,7 @@ if configuration.persist_data:
         json_data = persistent_data.model_dump_json(indent=4)
         if json_data != persistent_str:
             to_write = json_data
-            with open("persistent_data.json", "w") as file:
+            with Path("persistent_data.json").open("w") as file:
                 file.write(to_write)
 
 if configuration.require_login:
@@ -256,11 +257,10 @@ async def update_release_cache() -> bool:
         connector = aiohttp.TCPConnector(resolver=resolver)
     else:
         connector = None
-    async with aiohttp.ClientSession(connector=connector) as client_session:
-        async with client_session.get(BEAMMP_GITHUB_RELEASE) as response:
-            if response.status < 200 or response.status >= 300:
-                return False
-            response_json: dict[str, Any] = await response.json()
+    async with aiohttp.ClientSession(connector=connector) as client_session, client_session.get(BEAMMP_GITHUB_RELEASE) as response:
+        if response.status < 200 or response.status >= 300:
+            return False
+        response_json: dict[str, Any] = await response.json()
     if "tag_name" not in response_json or "assets" not in response_json:
         return False
     release_cache.files.clear()
@@ -336,7 +336,7 @@ async def write_config() -> None:
     async with aiofiles.open("config.json", "w") as file:
         await file.write(to_write)
 
-def authorization_required(required_permissions: list[str] = []):
+def authorization_required(required_permissions: list[str] | None = None):
     """
     Ensures the user is logged in and is an authorized user.
     """
@@ -358,6 +358,9 @@ def authorization_required(required_permissions: list[str] = []):
         if not configuration.require_login:
             return open_wrapper
         return login_wrapper
+
+    if required_permissions is None:
+        required_permissions = []
     return decorator
 
 # -- Website routes --
@@ -431,7 +434,7 @@ async def oauth_login():
     if "id" in identify:
         if int(identify["id"]) in configuration.authorized_discord_users:
             auth = AuthUser(auth_id=identify["id"])
-            login_user(auth, True)
+            login_user(auth, remember=True)
             session.pop("error")
             return redirect(f"{configuration.url_base_path}/dashboard")
         session["error"] = "unauthorized"
@@ -698,7 +701,7 @@ async def upload():
                         if error.code == "NotFoundError":
                             if await aioos.path.getsize(temp_path) >= 650 * 1000 * 1000: # Don't allow to upload files over 650MB to VirusTotal
                                 return abort(413)
-                            with open(temp_path, "rb") as file:
+                            with Path(temp_path).open("rb") as file:
                                 try:
                                     await client.scan_file_async(file, wait_for_completion=True)
                                     vt_file = await client.get_object_async(f"/files/{mod_hash}")
@@ -1048,13 +1051,12 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         connector = aiohttp.TCPConnector(resolver=resolver)
                     else:
                         connector = None
-                    async with aiohttp.ClientSession(connector=connector) as client_session:
-                        async with client_session.get(file.download_url) as response:
-                            if response.status < 200 or response.status >= 300:
-                                return {"action": "update", "success": False}
-                            async with aiofiles.open(filepath, "wb") as file:
-                                async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
-                                    await file.write(chunk)
+                    async with aiohttp.ClientSession(connector=connector) as client_session, client_session.get(file.download_url) as response:
+                        if response.status < 200 or response.status >= 300:
+                            return {"action": "update", "success": False}
+                        async with aiofiles.open(filepath, "wb") as file:
+                            async for chunk in response.content.iter_chunked(10 * 1024 * 1024): # Download the updated server in chunks of 10 MB
+                                await file.write(chunk)
                     async with server_executable_lock:
                         if server_data.process is not None and server_data.process.returncode is None:
                             await stop_server() # Ensure the executable is closed so it can be deleted
@@ -1094,12 +1096,11 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         connector = aiohttp.TCPConnector(resolver=resolver)
                     else:
                         connector = None
-                    async with aiohttp.ClientSession(connector=connector) as client_session:
-                        async with client_session.get(BEAMPAINT_MAIN_LUA) as response:
-                            if response.status < 200 or response.status >= 300:
-                                return {"action": "beampaint", "type": "install", "success": False}
-                            async with aiofiles.open(filepath, "wb") as file:
-                                await file.write(await response.content.read())
+                    async with aiohttp.ClientSession(connector=connector) as client_session,client_session.get(BEAMPAINT_MAIN_LUA) as response:
+                        if response.status < 200 or response.status >= 300:
+                            return {"action": "beampaint", "type": "install", "success": False}
+                        async with aiofiles.open(filepath, "wb") as file:
+                            await file.write(await response.content.read())
                     await aioos.rename(filepath, "Resources/Server/BeamPaintUpdater/main.lua")
 
                     async with state_lock:
@@ -1146,7 +1147,7 @@ async def receive() -> None:
 
 @app.websocket(f"{configuration.url_base_path}/ws")
 @authorization_required()
-async def websocket_connect():
+async def websocket_connect() -> None:
     task = None
     try:
         task = asyncio.ensure_future(receive())
@@ -1172,7 +1173,7 @@ async def websocket_connect():
 
 # Redirect to login page if unauthorized
 @app.errorhandler(Unauthorized)
-async def redirect_to_login(*_):
+async def redirect_to_login(*_) -> Response:
     return redirect(f"{configuration.url_base_path}/login")
 
 async def process_new_lines(new_lines: list[str]) -> None:
@@ -1226,7 +1227,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                     elif " is now synced!" in line:
                         for i, word in enumerate(data):
                             if len(data) > i - 1 and data[i + 1] == "is":
-                                server_data.persistent_data.logs.append({"player": data[i], "type": "sync", "timestamp": " ".join(data[0:2])})
+                                server_data.persistent_data.logs.append({"player": word, "type": "sync", "timestamp": " ".join(data[0:2])})
                                 break
                     elif " Connection Terminated" in line:
                         for i, word in enumerate(data):
@@ -1243,7 +1244,7 @@ async def process_new_lines(new_lines: list[str]) -> None:
                         server_data.error = True
                 elif data[2] == "[WARN]":
                     pass
-                elif data[2] == "[LUA]" or data[2] == "[LUA" and data[3] == "WARN]":
+                elif data[2] == "[LUA]" or (data[2] == "[LUA" and data[3] == "WARN]"):
                     pass # Server-side mods can trigger these log types
                 elif data[2] == "[CHAT]":
                     if data[3] == "<Server>":
@@ -1363,7 +1364,7 @@ async def monitor_temp_files() -> None:
                 del temp_files[filename]
 
 @app.before_serving
-async def startup():
+async def startup() -> None:
     # Make sure all necessary folders and files exist and clear any temporary files
     main_directory = await aioos.listdir()
     if "Resources" not in main_directory:
@@ -1380,7 +1381,7 @@ async def startup():
     if len(await aioos.listdir("Resources/Client.temp")) != 0:
         temp_files = await aioos.listdir("Resources/Client.temp")
         for file in temp_files:
-            await aioos.remove(os.path.join("Resources/Client.temp/", file))
+            await aioos.remove(Path("Resources/Client.temp/").joinpath(file))
     if configuration.beammp_executable_path + ".temp" in main_directory:
         await aioos.remove(configuration.beammp_executable_path + ".temp")
     if await aioos.path.exists("Resources/Server/BeamPaintUpdater/main.lua.temp"):
@@ -1399,18 +1400,19 @@ async def startup():
     app.tasks.append(asyncio.create_task(monitor_temp_files()))
 
 @app.after_serving
-async def shutdown():
+async def shutdown() -> None:
     if hasattr(app, "tasks"):
         for task in app.tasks:
-            task.cancel()
+            if task.get_name() != "close_sockets":
+                task.cancel()
     if server_data.process is not None and server_data.process.returncode is None:
         server_data.process.terminate()
 
 # Close websockets upon shutdown
-def close_sockets(*_):
-    asyncio.create_task(broker.event(None))
+def close_sockets(*_) -> None:
+    app.tasks.append(asyncio.create_task(broker.event(None), name="close_sockets"))
 
-async def main():
+async def main() -> None:
     config = Config()
     config.bind = ["0.0.0.0:" + MANAGER_PORT]
 
