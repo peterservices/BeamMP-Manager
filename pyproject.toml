@@ -17,25 +17,31 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pyinstaller>=6.20.0",
 ]
 
 [tool.ruff.lint]
 extend-select = [
-    "F",
-    "W",
-    "E",
-    "I",
-    "UP",
+    "B",
     "C4",
-    "ISC",
+    "E",
+    "F",
+    "FBT",
+    "I",
     "ICN",
+    "ISC",
+    "PTH",
+    "PYI",
     "RET",
+    "RUF",
+    "S",
+    "SIM",
     "SIM",
     "TID",
-    "PYI"
+    "UP",
+    "W"
 ]
 ignore = [
-    "E501",
-    "SIM117"
+    "E501"
 ]
