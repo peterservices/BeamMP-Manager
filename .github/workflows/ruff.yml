@@ -3,6 +3,7 @@ name: Ruff
 on:
   push:
     paths:
+      - '**'
       - '!**.md'
       - '!assets/**'
       - '!**.yml'

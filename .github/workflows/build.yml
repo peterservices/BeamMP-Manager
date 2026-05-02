@@ -7,6 +7,7 @@ on:
     tags:
       - "v*.*.*"
     paths:
+      - '**'
       - '!**.md'
       - '!assets/**'
       - '!**.yml'
