@@ -1,5 +1,8 @@
 # BeamMP Manager
 
+[![Build](https://github.com/peterservices/BeamMP-Manager/actions/workflows/build.yml/badge.svg)](https://github.com/peterservices/BeamMP-Manager/actions/workflows/build.yml)
+[![Ruff](https://github.com/peterservices/BeamMP-Manager/actions/workflows/ruff.yml/badge.svg)](https://github.com/peterservices/BeamMP-Manager/actions/workflows/ruff.yml)
+
 A configurable web-based manager for your BeamMP server using Discord as authentication.
 
 > [!IMPORTANT]
