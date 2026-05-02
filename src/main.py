@@ -91,7 +91,7 @@ if SECRET_KEY is None or len(SECRET_KEY) == 0:
 
 VT_KEY = os.getenv("VT_KEY")
 
-app = Quart(__name__, static_folder=Path(BASE_PATH).joinpath("static"), template_folder=Path(BASE_PATH).joinpath("templates"))
+app = Quart(__name__, static_folder=str(Path(BASE_PATH).joinpath("static").resolve()), template_folder=str(Path(BASE_PATH).joinpath("templates").resolve()))
 app.secret_key = SECRET_KEY
 app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
 
@@ -107,7 +107,7 @@ else:
         config_str = file.read()
     configuration = LocalConfiguration.model_validate_json(config_str)
     if configuration and Path(configuration.beammp_executable_path).exists():
-        configuration.beammp_executable_path = Path(configuration.beammp_executable_path).resolve()
+        configuration.beammp_executable_path = str(Path(configuration.beammp_executable_path).resolve())
 
     # Save any new changes to disk
     json_data = configuration.model_dump_json(indent=4)
@@ -1381,7 +1381,7 @@ async def startup() -> None:
     if len(await aioos.listdir("Resources/Client.temp")) != 0:
         temp_files = await aioos.listdir("Resources/Client.temp")
         for file in temp_files:
-            await aioos.remove(Path("Resources/Client.temp/").joinpath(file))
+            await aioos.remove(str(Path("Resources/Client.temp/").joinpath(file).resolve()))
     if configuration.beammp_executable_path + ".temp" in main_directory:
         await aioos.remove(configuration.beammp_executable_path + ".temp")
     if await aioos.path.exists("Resources/Server/BeamPaintUpdater/main.lua.temp"):
