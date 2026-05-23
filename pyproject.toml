@@ -21,6 +21,9 @@ dev = [
     "pyinstaller>=6.20.0",
 ]
 
+[tool.uv]
+exclude-newer = "2 days"
+
 [tool.ruff.lint]
 extend-select = [
     "B",
