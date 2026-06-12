@@ -69,7 +69,6 @@ jobs:
         with:
           name: ${{ matrix.asset_name }}.zip
           path: dist/beammp_manager/${{ matrix.asset_name }}.zip
-          retention-days: 15
           overwrite: true
           archive: false
 
