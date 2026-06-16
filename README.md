@@ -99,6 +99,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
     "beammp_executable_path": "",
     "detect_mod_maps": true,
     "discord_oauth2_redirect_url": "",
+    "http_server_port": 80,
     "maximum_log_entries": 500,
     "persist_data": true,
     "preserve_setting_changes": true,
@@ -116,6 +117,8 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 **detect_mod_maps** - Whether uploaded mods are scanned for modded levels. If found, the level filepath will automatically be saved (if persist_data is enabled) and available in the settings dropdown.
 
 **discord_oauth2_redirect_url** - The public URL to the web manager's `/login/oauth2` page. This URL must be added on the Discord Developer Portal under OAuth2.
+
+**http_server_port** - The port to host the manager on.
 
 **maximum_log_entries** - The maximum number of total log entries that will be stored. This is useful to limit the file size of the persistent data file.
 

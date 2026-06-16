@@ -30,6 +30,7 @@ class LocalConfiguration(BaseModel):
     beammp_executable_path: str = "BeamMP-Server"
     detect_mod_maps: bool = True
     discord_oauth2_redirect_url: str = ""
+    http_server_port: int = Field(80, ge=1, le=65535)
     maximum_log_entries: PositiveInt = 500
     persist_data: bool = True
     preserve_setting_changes: bool = True

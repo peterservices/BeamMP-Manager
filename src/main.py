@@ -79,10 +79,6 @@ load_dotenv(dotenv_path=DOTENV_PATH)
 CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 
-MANAGER_PORT = os.getenv("MANAGER_PORT")
-if MANAGER_PORT is None or len(MANAGER_PORT) == 0:
-    raise KeyError("The MANAGER_PORT environment variable is required but missing")
-
 SECRET_KEY = os.getenv("SECRET_KEY")
 if SECRET_KEY is None or len(SECRET_KEY) == 0:
     SECRET_KEY = token_urlsafe() # Generate a new SECRET_KEY
@@ -1414,7 +1410,7 @@ def close_sockets(*_) -> None:
 
 async def main() -> None:
     config = Config()
-    config.bind = ["0.0.0.0:" + MANAGER_PORT]
+    config.bind = [f"0.0.0.0:{configuration.http_server_port}"]
 
     shutdown_trigger = None
     if sys.platform != "win32": # asyncio does not support handling signals on Windows
