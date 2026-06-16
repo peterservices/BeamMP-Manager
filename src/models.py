@@ -38,7 +38,7 @@ class LocalConfiguration(BaseModel):
     require_login: bool = True
     restart_on_error: bool = True
     url_base_path: str = "/beammp"
-    virustotal_scanning: bool = True
+    virustotal_scanning: bool = False
 
 class PersistentData(BaseModel):
     """

@@ -137,7 +137,7 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 
 **url_base_path** - The base URL path to use for accessing the web manager. This is useful if you run multiple web services on the same URL, otherwise you can just leave this empty.
 
-**virustotal_scanning** - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `false` if you do not have a VirusTotal API key.
+**virustotal_scanning** - Whether mod uploads should be scanned by VirusTotal before they are added to the server. Set to `true` if you have a VirusTotal API key defined in the `.env`.
 
 > [!IMPORTANT]
 > BeamMP-Manager is not affiliated or endorsed in any way by BeamPaint, BeamMP, or BeamNG Gmbh.
