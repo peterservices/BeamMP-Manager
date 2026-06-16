@@ -20,7 +20,6 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 * Download or compile a [BeamMP Server](https://github.com/BeamMP/BeamMP-Server) executable, and put it in the same directory as BeamMP-Manager
 * Copy the contents of `.env.example` and create a file named `.env`
   * Add your Discord App's client ID and client secret*, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
-  * Change MANAGER_PORT to the port you want the web server to be served on (80 by default)
 * Run the web server in the terminal with `./beammp_server.exe` or `./beammp_server` (You can also run it like a normal executable via a file manager)
   * Edit the `config.json` (See [configuring](#configuring))
 
@@ -33,7 +32,6 @@ A configurable web-based manager for your BeamMP server using Discord as authent
 * Download or compile a [BeamMP Server](https://github.com/BeamMP/BeamMP-Server) executable, and put it in the same directory as BeamMP-Manager
 * Copy the contents of `.env.example` and create a file named `.env`
   * Add your Discord App's client ID and client secret*, as well as your VirusTotal API key if you have one (SECRET_KEY will be auto-filled, or you can generate your own)
-  * Change MANAGER_PORT to the port you want the web server to be served on (80 by default)
 * Run the web server in the terminal with `.venv/bin/python src/main.py`
   * Edit the `config.json` (See [configuring](#configuring))
 
