@@ -9,7 +9,7 @@ dependencies = [
     "discord-oauth2-py==1.2.2",
     "pydantic==2.13.4",
     "python-dotenv==1.2.2",
-    "quart==0.21.0",
+    "quart==0.22.0",
     "quart-auth==0.11.0",
     "tomlkit==0.15.1",
     "vt-py==0.22.0",
