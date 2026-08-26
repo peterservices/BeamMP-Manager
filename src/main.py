@@ -295,8 +295,7 @@ async def start_server() -> None:
             async with aiofiles.open("Server.log", "w") as file:
                 await file.writelines("")
         except OSError as e:
-            logger.exception("Could not open and write to Server.log")
-            raise e
+            raise OSError("Could not open and write to Server.log") from e
         log_file_position = 0
         if configuration.persist_data:
             await verify_persistent_fields()
@@ -384,7 +383,7 @@ async def guest_mods():
     async with aiofiles.open("Resources/Client/mods.json") as file:
         mods: dict[str, dict[str]] | None = json.loads(await file.read())
     if mods is not None:
-        for _, mod in mods.items():
+        for mod in mods.values():
             mod.pop("hash")
             mod.pop("lastwrite")
             mod.pop("protected")
@@ -646,7 +645,7 @@ async def upload():
             if temp_files[filename].complete:
                 return abort(409)
 
-        temp_files[filename].last_write = datetime.datetime.now()
+        temp_files[filename].last_write = datetime.datetime.now(tz=datetime.UTC)
 
         to_write: bytes = chunk.read()
         if len(to_write) != end - start + 1:
@@ -697,7 +696,7 @@ async def upload():
                         if error.code == "NotFoundError":
                             if await aioos.path.getsize(temp_path) >= 650 * 1000 * 1000: # Don't allow to upload files over 650MB to VirusTotal
                                 return abort(413)
-                            with Path(temp_path).open("rb") as file:
+                            with Path(temp_path).open("rb") as file: # noqa: ASYNC230  client.scan_file_async does not support aiofiles AsyncBufferedReader objects, add actual async fix later
                                 try:
                                     await client.scan_file_async(file, wait_for_completion=True)
                                     vt_file = await client.get_object_async(f"/files/{mod_hash}")
@@ -705,7 +704,7 @@ async def upload():
                                     await aioos.remove(temp_path)
                                     async with temp_files_lock:
                                         del temp_files[filename]
-                                    raise error
+                                    raise vt.error.APIError from error
 
                                 if vt_file.error is not None:
                                     await aioos.remove(temp_path)
@@ -725,7 +724,7 @@ async def upload():
                             await aioos.remove(temp_path)
                             async with temp_files_lock:
                                 del temp_files[filename]
-                            raise error
+                            raise vt.error.APIError from error
 
             # Add the level path to the configuration, if enabled
             if configuration.detect_mod_maps:
@@ -782,7 +781,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     async with aiofiles.open("Resources/Client/mods.json") as file:
                         mods: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                     if mods is not None:
-                        for _, mod in mods.items():
+                        for mod in mods.values():
                             mod.pop("hash")
                             mod.pop("lastwrite")
                             mod.pop("protected")
@@ -792,7 +791,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                         async with aiofiles.open("Resources/Client.disabled/mods.json") as file:
                             mods_disabled: dict[str, dict[str, bool | str | int]] | None = json.loads(await file.read())
                         if mods_disabled is not None:
-                            for _, mod in mods_disabled.items():
+                            for mod in mods_disabled.values():
                                 mod.pop("hash")
                                 mod.pop("lastwrite")
                                 mod.pop("protected")
@@ -805,7 +804,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     if not user_has_permissions(current_user, ["configure"]):
                         return None
                     async with release_cache.lock:
-                        if release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now():
+                        if release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now(tz=datetime.UTC):
                             updated = await update_release_cache()
                             if not updated:
                                 return None
@@ -1032,7 +1031,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             if not user_has_permissions(current_user, ["configure"]):
                 return None
             async with release_cache.lock:
-                if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now()):
+                if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now(tz=datetime.UTC)):
                     updated = await update_release_cache()
                     if not updated:
                         return None
@@ -1286,7 +1285,6 @@ async def process_new_lines(new_lines: list[str]) -> None:
                 continue
             else:
                 logger.warning("Invalid line format!")
-    return
 
 async def monitor_logs() -> None:
     """
@@ -1302,8 +1300,7 @@ async def monitor_logs() -> None:
                     output = await file.read()
                     log_file_position = await file.tell()
             except OSError as e:
-                logger.exception("Could not open and read from Server.log")
-                raise e
+                raise OSError("Could not open and read from Server.log") from e
 
             async with state_lock:
                 # Save old data and settings to compare with afterwards
@@ -1331,8 +1328,8 @@ async def monitor_logs() -> None:
             await send_changed_data(old_data)
 
             # Start the server again if has been 5 or more minutes since last restart, the returncode is not a system interrupt, and the setting is enabled
-            if configuration.restart_on_error and returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now()):
-                server_data.last_automatic_restart = datetime.datetime.now()
+            if configuration.restart_on_error and returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now(tz=datetime.UTC)):
+                server_data.last_automatic_restart = datetime.datetime.now(tz=datetime.UTC)
                 async with server_executable_lock:
                     await start_server()
 
@@ -1347,13 +1344,13 @@ async def monitor_temp_files() -> None:
         async with temp_files_lock:
             expired_items = []
             for filename, data in temp_files.items():
-                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now() and not data.lock.locked():
+                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now(tz=datetime.UTC) and not data.lock.locked():
                     path = safe_join("Resources/Client.temp/", filename + ".part")
                     if await aioos.path.exists(path):
                         await aioos.remove(path)
                     expired_items.append(filename)
                 elif data.last_write is not None:
-                    expires_in = (data.last_write + datetime.timedelta(minutes=1) - datetime.datetime.now()).seconds
+                    expires_in = (data.last_write + datetime.timedelta(minutes=1) - datetime.datetime.now(tz=datetime.UTC)).seconds
                     if expires_in < next_file_expiry and expires_in >= 0:
                         next_file_expiry = expires_in
             for filename in expired_items:

@@ -78,7 +78,7 @@ class PersistentData(BaseModel):
         mods: dict[str, dict[str]] | None = json.loads(mods_json)
         if mods is not None:
             hashes = set()
-            for _, v in mods.items():
+            for v in mods.values():
                 hashes.add(v["hash"])
 
             async with self.lock:
