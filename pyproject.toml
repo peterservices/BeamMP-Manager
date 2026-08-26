@@ -8,7 +8,7 @@ dependencies = [
     "aiohttp[speedups]==3.14.3",
     "discord-oauth2-py==1.2.2",
     "pydantic==2.13.4",
-    "python-dotenv==1.2.2",
+    "python-dotenv==1.2.3",
     "quart==0.21.0",
     "quart-auth==0.11.0",
     "tomlkit==0.15.1",
@@ -18,7 +18,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.2",
-    "pyinstaller>=6.21.0",
+    "pyinstaller>=6.22.2",
 ]
 
 [tool.uv]
