@@ -7,7 +7,7 @@ dependencies = [
     "aiofiles==25.1.0",
     "aiohttp[speedups]==3.14.3",
     "discord-oauth2-py==1.2.2",
-    "pydantic==2.13.5",
+    "pydantic==2.14.0",
     "python-dotenv==1.2.4",
     "quart==0.22.0",
     "quart-auth==0.12.0",
