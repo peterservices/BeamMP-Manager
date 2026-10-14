@@ -1,5 +1,5 @@
 import asyncio
-import datetime
+import datetime as dt
 import hashlib
 import json
 from collections.abc import AsyncGenerator
@@ -153,7 +153,7 @@ class ServerData(BaseModel):
     connected: bool = False
     started: bool = False
     error: bool = False
-    last_automatic_restart: datetime.datetime | None = None
+    last_automatic_restart: dt.datetime | None = None
     version: str | None = None
     lua_version: str | None = None
     port: int | None = None
@@ -217,7 +217,7 @@ class TempFile(BaseModel):
     lock: asyncio.Lock = Field(default_factory=asyncio.Lock)
     expected_next_byte: int = 0
     complete: bool = False
-    last_write: datetime.datetime | None = None
+    last_write: dt.datetime | None = None
 
 class ReleaseFile(BaseModel):
     """
@@ -235,7 +235,7 @@ class ReleaseCache(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     lock: asyncio.Lock = Field(default_factory=asyncio.Lock, exclude=True)
-    last_cache: datetime.datetime | None = Field(default=None, exclude=True)
+    last_cache: dt.datetime | None = Field(default=None, exclude=True)
     version: str | None = None
     files: list[ReleaseFile] = []
 
@@ -251,7 +251,7 @@ class Broker:
         for connection in self.connections.copy():
             await connection.put(data)
 
-    async def subscribe(self: Self) -> AsyncGenerator[str, None]:
+    async def subscribe(self: Self) -> AsyncGenerator[str]:
         connection = asyncio.Queue()
         self.connections.add(connection)
         try:

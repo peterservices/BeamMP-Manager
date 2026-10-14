@@ -1,6 +1,6 @@
 import asyncio
 import contextlib
-import datetime
+import datetime as dt
 import json
 import logging
 import os
@@ -89,7 +89,7 @@ VT_KEY = os.getenv("VT_KEY")
 
 app = Quart(__name__, static_folder=str(Path(BASE_PATH).joinpath("static").resolve()), template_folder=str(Path(BASE_PATH).joinpath("templates").resolve()))
 app.secret_key = SECRET_KEY
-app.permanent_session_lifetime = datetime.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
+app.permanent_session_lifetime = dt.timedelta(seconds=30) # Makes "error" session key automatically expire after 30 seconds
 
 QuartAuth(app, duration=30 * 24 * 60 * 60)
 
@@ -645,7 +645,7 @@ async def upload():
             if temp_files[filename].complete:
                 return abort(409)
 
-        temp_files[filename].last_write = datetime.datetime.now(tz=datetime.UTC)
+        temp_files[filename].last_write = dt.datetime.now(tz=dt.UTC)
 
         to_write: bytes = chunk.read()
         if len(to_write) != end - start + 1:
@@ -804,7 +804,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
                     if not user_has_permissions(current_user, ["configure"]):
                         return None
                     async with release_cache.lock:
-                        if release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now(tz=datetime.UTC):
+                        if release_cache.last_cache is None or release_cache.last_cache + dt.timedelta(minutes=2) < dt.datetime.now(tz=dt.UTC):
                             updated = await update_release_cache()
                             if not updated:
                                 return None
@@ -1031,7 +1031,7 @@ async def process_websocket_request(ws_request: str) -> dict[str] | Literal[True
             if not user_has_permissions(current_user, ["configure"]):
                 return None
             async with release_cache.lock:
-                if (release_cache.last_cache is None or release_cache.last_cache + datetime.timedelta(minutes=2) < datetime.datetime.now(tz=datetime.UTC)):
+                if (release_cache.last_cache is None or release_cache.last_cache + dt.timedelta(minutes=2) < dt.datetime.now(tz=dt.UTC)):
                     updated = await update_release_cache()
                     if not updated:
                         return None
@@ -1328,8 +1328,8 @@ async def monitor_logs() -> None:
             await send_changed_data(old_data)
 
             # Start the server again if has been 5 or more minutes since last restart, the returncode is not a system interrupt, and the setting is enabled
-            if configuration.restart_on_error and returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + datetime.timedelta(minutes=5) <= datetime.datetime.now(tz=datetime.UTC)):
-                server_data.last_automatic_restart = datetime.datetime.now(tz=datetime.UTC)
+            if configuration.restart_on_error and returncode != -2 and server_data.error and not server_executable_lock.locked() and (server_data.last_automatic_restart is None or server_data.last_automatic_restart + dt.timedelta(minutes=5) <= dt.datetime.now(tz=dt.UTC)):
+                server_data.last_automatic_restart = dt.datetime.now(tz=dt.UTC)
                 async with server_executable_lock:
                     await start_server()
 
@@ -1344,13 +1344,13 @@ async def monitor_temp_files() -> None:
         async with temp_files_lock:
             expired_items = []
             for filename, data in temp_files.items():
-                if data.last_write is not None and not data.complete and data.last_write + datetime.timedelta(minutes=1) < datetime.datetime.now(tz=datetime.UTC) and not data.lock.locked():
+                if data.last_write is not None and not data.complete and data.last_write + dt.timedelta(minutes=1) < dt.datetime.now(tz=dt.UTC) and not data.lock.locked():
                     path = safe_join("Resources/Client.temp/", filename + ".part")
                     if await aioos.path.exists(path):
                         await aioos.remove(path)
                     expired_items.append(filename)
                 elif data.last_write is not None:
-                    expires_in = (data.last_write + datetime.timedelta(minutes=1) - datetime.datetime.now(tz=datetime.UTC)).seconds
+                    expires_in = (data.last_write + dt.timedelta(minutes=1) - dt.datetime.now(tz=dt.UTC)).seconds
                     if expires_in < next_file_expiry and expires_in >= 0:
                         next_file_expiry = expires_in
             for filename in expired_items:
