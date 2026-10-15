@@ -23,10 +23,14 @@ jobs:
         include:
           - os: windows-latest
             asset_name: beammp_manager_windows_x64
+          - os: ubuntu-26.04
+            asset_name: beammp_manager_ubuntu_26_x64
           - os: ubuntu-24.04
             asset_name: beammp_manager_ubuntu_24_x64
           - os: ubuntu-22.04
             asset_name: beammp_manager_ubuntu_22_x64
+          - os: ubuntu-26.04-arm
+            asset_name: beammp_manager_ubuntu_26_arm64
           - os: ubuntu-24.04-arm
             asset_name: beammp_manager_ubuntu_24_arm64
           - os: ubuntu-22.04-arm
